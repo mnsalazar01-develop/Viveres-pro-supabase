@@ -1,11 +1,9 @@
 import streamlit as st
 from supabase import create_client
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 
-# 1. CONFIGURACIÓN E INICIALIZACIÓN
-st.set_page_config(page_title="Viveres Pro v2.0", layout="wide", page_icon="🛒")
-
+# 1. CONEXIÓN (Usando tus Secrets)
 @st.cache_resource
 def init_connection():
     url = st.secrets["SUPABASE_URL"]
@@ -14,7 +12,7 @@ def init_connection():
 
 supabase = init_connection()
 
-# --- FUNCIONES DE SOPORTE ---
+# --- FUNCIONES DE APOYO ---
 def subir_a_storage(archivo):
     if archivo:
         try:
@@ -25,195 +23,165 @@ def subir_a_storage(archivo):
                 file_options={"content-type": archivo.type}
             )
             return supabase.storage.from_("imagenes").get_public_url(nombre_archivo)
-        except Exception as e:
-            st.error(f"Error al subir imagen: {e}")
+        except:
+            return None
     return None
 
-# 2. MENÚ PRINCIPAL
-menu = ["🔍 Dashboard de Ofertas", "📦 Administración de Productos", "🏪 Tiendas y Sucursales", "🏷️ Publicar Oferta"]
-choice = st.sidebar.selectbox("Menú de Navegación", menu)
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Mi Ahorro Viveres", layout="wide", page_icon="🛒")
 
-# --- SECCIÓN 1: DASHBOARD DE OFERTAS ---
-if choice == "🔍 Dashboard de Ofertas":
-    st.title("🚀 Ofertas Activas")
+# 2. MENÚ LATERAL
+st.sidebar.title("Menú Principal")
+menu = ["🔍 Alertas y Ofertas", "📦 Catálogo de Productos", "🏪 Tiendas y Sucursales", "🏷️ Registrar Ofertas"]
+choice = st.sidebar.selectbox("Ir a:", menu)
+
+# --- SECCIÓN 1: ALERTAS Y OFERTAS (EL CORAZÓN DE LA APP) ---
+if choice == "🔍 Alertas y Ofertas":
+    st.title("🔔 Mis Alertas de Ahorro")
+    
+    # Punto 1: Solo lo que me interesa
+    res_p = supabase.table("productos").select("nombre").execute()
+    lista_productos = sorted(list(set([p['nombre'] for p in res_p.data])))
+    
+    productos_interes = st.multiselect(
+        "⭐ Selecciona los productos que necesitas comprar hoy:", 
+        lista_productos, 
+        help="Si eliges 'Leche', solo verás ofertas de leche."
+    )
+
+    # Consulta de ofertas con relaciones
     res = supabase.table("ofertas").select("""
         precio_oferta, fecha_fin,
         productos(nombre, marca, url_imagen, tamano, unidad),
-        supermercados(nombre_supermercado, url_logo),
+        supermercados(nombre_supermercado),
         sucursales(nombre_sucursal, ciudad)
     """).execute()
 
     if res.data:
-        df_o = pd.json_normalize(res.data)
-        ciudades = ["Todas"] + sorted(list(df_o['sucursales.ciudad'].dropna().unique()))
-        ciudad_sel = st.sidebar.selectbox("📍 Filtrar por Ciudad", ciudades)
+        df = pd.json_normalize(res.data)
         
-        if ciudad_sel != "Todas":
-            df_o = df_o[df_o['sucursales.ciudad'] == ciudad_sel]
+        # Filtrar por interés
+        if productos_interes:
+            df = df[df['productos.nombre'].isin(productos_interes)]
 
-        for _, o in df_o.iterrows():
-            fecha_f = datetime.strptime(o['fecha_fin'], '%Y-%m-%d').strftime('%d/%m/%Y')
-            with st.container(border=True):
-                c1, c2, c3 = st.columns([1, 2, 1])
-                with c1:
-                    st.image(o['productos.url_imagen'] or "https://placeholder.com", use_container_width=True)
-                with c2:
-                    st.subheader(f"{o['productos.nombre']} ({o['productos.marca']})")
-                    st.write(f"📏 {o['productos.tamano']} {o['productos.unidad']}")
-                    suc = o['sucursales.nombre_sucursal'] if pd.notna(o['sucursales.nombre_sucursal']) else "Todas las Sucursales"
-                    st.write(f"🏢 **{o['supermercados.nombre_supermercado']}** - 📍 {suc}")
-                with c3:
-                    st.metric("OFERTA", f"${o['precio_oferta']}")
-                    st.warning(f"⌛ Vence: {fecha_f}")
+        if not df.empty:
+            for _, o in df.iterrows():
+                # Punto 2: Alarma de vencimiento
+                fecha_vence = datetime.strptime(o['fecha_fin'], '%Y-%m-%d').date()
+                dias_faltantes = (fecha_vence - date.today()).days
+                
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([1, 2, 1])
+                    with c1:
+                        st.image(o['productos.url_imagen'] or "https://placeholder.com", use_container_width=True)
+                    with c2:
+                        st.subheader(f"{o['productos.nombre']} - {o['productos.marca']}")
+                        st.write(f"🏢 {o['supermercados.nombre_supermercado']} ({o['sucursales.nombre_sucursal'] or 'Todas las sucursales'})")
+                        
+                        if 0 <= dias_faltantes <= 2:
+                            st.error(f"🚨 ¡COMPRAR PRONTO! Vence en {dias_faltantes} días ({fecha_vence.strftime('%d/%m/%Y')})")
+                        elif dias_faltantes < 0:
+                            st.write("❌ Oferta vencida")
+                        else:
+                            st.info(f"⏳ Tienes tiempo: vence el {fecha_vence.strftime('%d/%m/%Y')}")
+                    with c3:
+                        st.metric("PRECIO", f"${o['precio_oferta']}")
+        else:
+            st.info("No hay ofertas para los productos seleccionados.")
     else:
-        st.info("No hay ofertas activas.")
+        st.info("No hay ofertas registradas en el sistema.")
 
-# --- SECCIÓN 2: ADMINISTRACIÓN DE PRODUCTOS (CRUD) ---
-elif choice == "📦 Administración de Productos":
-    st.title("🛠️ Gestión del Catálogo")
-    t1, t2, t3 = st.tabs(["📋 Ver Inventario", "➕ Crear Nuevo", "✏️ Editar/Borrar"])
-
+# --- SECCIÓN 2: CATÁLOGO DE PRODUCTOS (ADMINISTRACIÓN) ---
+elif choice == "📦 Catálogo de Productos":
+    st.title("📦 Administración de Productos")
+    t1, t2 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto"])
+    
     with t1:
-        busq = st.text_input("Buscar por nombre o código de barras")
         res_p = supabase.table("productos").select("*").execute()
         if res_p.data:
-            df_p = pd.DataFrame(res_p.data)
-            if busq:
-                df_p = df_p[df_p.astype(str).apply(lambda x: x.str.contains(busq, case=False)).any(axis=1)]
-            st.dataframe(df_p, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
-
+            st.dataframe(pd.DataFrame(res_p.data), column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
+            
     with t2:
         with st.form("nuevo_p", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            nombre = c1.text_input("Nombre*")
-            marca = c2.text_input("Marca")
-            barras = c1.text_input("Código de Barras")
-            tam = c2.number_input("Tamaño", min_value=0.0)
-            uni = c1.selectbox("Unidad", ["gr", "kg", "ml", "lt", "unidad"])
-            foto = c2.file_uploader("Imagen (JPG, PNG, WEBP)", type=['jpg', 'png', 'jpeg', 'webp'])
+            col1, col2 = st.columns(2)
+            nombre = col1.text_input("Nombre del Producto*")
+            marca = col2.text_input("Marca")
+            barras = col1.text_input("Código de Barras")
+            tam = col2.number_input("Tamaño", min_value=0.0)
+            uni = col1.selectbox("Unidad", ["gr", "kg", "ml", "lt", "unidad"])
+            foto = col2.file_uploader("Foto", type=['jpg', 'png', 'jpeg', 'webp'])
+            
             if st.form_submit_button("Guardar Producto"):
                 url_img = subir_a_storage(foto)
-                supabase.table("productos").insert({"nombre": nombre, "marca": marca, "codigo_barras": barras, "tamano": tam, "unidad": uni, "url_imagen": url_img}).execute()
-                st.success("¡Producto registrado!"); st.rerun()
+                supabase.table("productos").insert({
+                    "nombre": nombre, "marca": marca, "codigo_barras": barras, 
+                    "tamano": tam, "unidad": uni, "url_imagen": url_img
+                }).execute()
+                st.success("Producto guardado.")
+                st.rerun()
 
-    with t3:
-        st.subheader("⚙️ Gestión de Existentes")
-        # Volvemos a consultar para tener datos frescos
-        res_p = supabase.table("productos").select("*").order("nombre").execute()
-        
-        if res_p.data:
-            # Creamos un diccionario para seleccionar el producto por nombre
-            prod_dict = {f"{p['nombre']} - {p['marca']}": p for p in res_p.data}
-            sel_nombre = st.selectbox("Selecciona un producto para modificar:", prod_dict.keys(), key="selector_editar")
-            p = prod_dict[sel_nombre]
-    
-            # Formulario de edición con los datos actuales precargados
-            with st.form("edit_p_completo"):
-                st.info(f"Editando: {p['nombre']}")
-                
-                c1, c2 = st.columns(2)
-                with c1:
-                    en = st.text_input("Nombre", value=p['nombre'])
-                    em = st.text_input("Marca", value=p['marca'])
-                    eb = st.text_input("Código de Barras", value=p['codigo_barras'] or "")
-                
-                with c2:
-                    et = st.number_input("Tamaño", value=float(p['tamano']) if p['tamano'] else 0.0)
-                    eu = st.selectbox("Unidad", ["gr", "kg", "ml", "lt", "unidad"], index=["gr", "kg", "ml", "lt", "unidad"].index(p['unidad']) if p['unidad'] in ["gr", "kg", "ml", "lt", "unidad"] else 0)
-                    ef = st.file_uploader("Actualizar Foto (dejar vacío para mantener la actual)", type=['jpg', 'png', 'jpeg', 'webp'])
-                
-                # Mostrar miniatura de la foto actual
-                if p['url_imagen']:
-                    st.image(p['url_imagen'], caption="Foto actual", width=150)
-    
-                c_del, c_upd = st.columns(2)
-                
-                if c_upd.form_submit_button("💾 Guardar Cambios"):
-                    # 1. Si hay foto nueva, la subimos
-                    nueva_url = p['url_imagen']
-                    if ef:
-                        nueva_url = subir_a_storage(ef)
-                    
-                    # 2. Preparamos los datos actualizados
-                    datos_update = {
-                        "nombre": en,
-                        "marca": em,
-                        "codigo_barras": eb,
-                        "tamano": et,
-                        "unidad": eu,
-                        "url_imagen": nueva_url
-                    }
-                    
-                    try:
-                        supabase.table("productos").update(datos_update).eq("id_producto", p['id_producto']).execute()
-                        st.success("✅ Producto actualizado correctamente")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al actualizar: {e}")
-                
-                if c_del.form_submit_button("🗑️ Eliminar Producto"):
-                    # Confirmación visual simple
-                    try:
-                        supabase.table("productos").delete().eq("id_producto", p['id_producto']).execute()
-                        st.warning("⚠️ Producto eliminado")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"No se pudo eliminar. Es posible que el producto tenga ofertas vinculadas.")
-        else:
-            st.info("No hay productos para editar.")
-
-
-# --- SECCIÓN 3: TIENDAS Y SUCURSALES ---
+# --- SECCIÓN 3: TIENDAS ---
 elif choice == "🏪 Tiendas y Sucursales":
-    st.title("🏪 Gestión de Establecimientos")
-    with st.form("nueva_tienda"):
-        nom_super = st.text_input("Nombre del Supermercado")
-        if st.form_submit_button("Añadir Supermercado"):
-            supabase.table("supermercados").insert({"nombre_supermercado": nom_super}).execute()
-            st.success("Supermercado añadido"); st.rerun()
+    st.title("🏪 Registro de Tiendas")
+    with st.form("super"):
+        nom = st.text_input("Nombre del Supermercado")
+        if st.form_submit_button("Guardar Super"):
+            supabase.table("supermercados").insert({"nombre_supermercado": nom}).execute()
+            st.success("Supermercado guardado.")
     
     st.divider()
     
     supers = supabase.table("supermercados").select("*").execute()
     if supers.data:
         df_s = pd.DataFrame(supers.data)
-        dict_s = dict(zip(df_s['nombre_supermercado'], df_s['id_super']))
-        with st.form("nueva_suc"):
-            sup_sel = st.selectbox("Pertenece a:", list(dict_s.keys()))
-            nom_suc = st.text_input("Nombre Sucursal (Ej: Centro)")
+        super_dict = dict(zip(df_s['nombre_supermercado'], df_s['id_super']))
+        with st.form("suc"):
+            s_sel = st.selectbox("Selecciona Supermercado", list(super_dict.keys()))
+            n_suc = st.text_input("Nombre Sucursal")
             ciu = st.text_input("Ciudad")
-            if st.form_submit_button("Añadir Sucursal"):
-                supabase.table("sucursales").insert({"id_super": dict_s[sup_sel], "nombre_sucursal": nom_suc, "ciudad": ciu}).execute()
-                st.success("Sucursal añadida"); st.rerun()
+            if st.form_submit_button("Guardar Sucursal"):
+                supabase.table("sucursales").insert({"id_super": super_dict[s_sel], "nombre_sucursal": n_suc, "ciudad": ciu}).execute()
+                st.success("Sucursal guardada.")
 
-# --- SECCIÓN 4: PUBLICAR OFERTA ---
-elif choice == "🏷️ Publicar Oferta":
-    st.title("🏷️ Nueva Oferta")
-    prods = supabase.table("productos").select("id_producto, nombre, marca").execute()
-    supers = supabase.table("supermercados").select("id_super, nombre_supermercado").execute()
+# --- SECCIÓN 4: REGISTRAR OFERTAS (CARGA POR SUPERMERCADO) ---
+elif choice == "🏷️ Registrar Ofertas":
+    st.title("🏷️ Cargar Ofertas por Catálogo")
     
-    if prods.data and supers.data:
+    supers = supabase.table("supermercados").select("*").execute()
+    if supers.data:
+        df_s = pd.DataFrame(supers.data)
+        super_dict = dict(zip(df_s['nombre_supermercado'], df_s['id_super']))
+        
+        # Punto 3: Seleccionas el Super primero, como te llega el volante
+        super_sel = st.selectbox("¿De qué Supermercado es el volante/oferta?", list(super_dict.keys()))
+        
+        # Sucursales de ese Super
+        sucs = supabase.table("sucursales").select("*").eq("id_super", super_dict[super_sel]).execute()
+        suc_dict = {"--- TODAS LAS SUCURSALES ---": None}
+        for s in sucs.data: suc_dict[s['nombre_sucursal']] = s['id_sucursal']
+        
+        suc_sel = st.selectbox("¿Aplica a una sucursal específica?", list(suc_dict.keys()))
+        
+        st.divider()
+        
+        # Formulario de carga
+        prods = supabase.table("productos").select("id_producto, nombre, marca").execute()
+        p_df = pd.DataFrame(prods.data)
+        p_dict = dict(zip(p_df['nombre'] + " (" + p_df['marca'] + ")", p_df['id_producto']))
+        
         with st.form("form_of"):
-            p_df = pd.DataFrame(prods.data)
-            p_dict = dict(zip(p_df['nombre'] + " " + p_df['marca'], p_df['id_producto']))
-            p_sel = st.selectbox("Producto", p_dict.keys())
-            
-            s_df = pd.DataFrame(supers.data)
-            s_dict = dict(zip(s_df['nombre_supermercado'], s_df['id_super']))
-            s_sel = st.selectbox("Supermercado", s_dict.keys())
-            
-            # Sucursales dinámicas
-            sucs = supabase.table("sucursales").select("*").eq("id_super", s_dict[s_sel]).execute()
-            suc_dict = {"--- TODAS ---": None}
-            for sc in sucs.data: suc_dict[sc['nombre_sucursal']] = sc['id_sucursal']
-            suc_sel = st.selectbox("Sucursal (Opcional)", suc_dict.keys())
-            
+            p_sel = st.selectbox("Producto en oferta", list(p_dict.keys()))
             precio = st.number_input("Precio Oferta", min_value=0.0, format="%.2f")
-            fecha = st.date_input("Vencimiento", format="DD/MM/YYYY")
+            vence = st.date_input("¿Cuándo termina la oferta?", format="DD/MM/YYYY")
             
-            if st.form_submit_button("🚀 Publicar"):
+            if st.form_submit_button("Publicar Oferta"):
                 supabase.table("ofertas").insert({
-                    "id_producto": p_dict[p_sel], "id_super": s_dict[s_sel], 
-                    "id_sucursal": suc_dict[suc_sel], "precio_oferta": precio, "fecha_fin": str(fecha)
+                    "id_producto": p_dict[p_sel],
+                    "id_super": super_dict[super_sel],
+                    "id_sucursal": suc_dict[suc_sel],
+                    "precio_oferta": precio,
+                    "fecha_fin": str(vence)
                 }).execute()
-                st.success("¡Oferta publicada!"); st.balloons()
+                st.success("Oferta publicada con éxito.")
+    else:
+        st.warning("Primero debes registrar un Supermercado.")
