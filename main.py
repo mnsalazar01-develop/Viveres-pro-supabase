@@ -2,7 +2,7 @@ import streamlit as st
 from supabase import create_client
 import pandas as pd
 
-# 1. Conexión
+# 1. Conexión (Asegúrate de que esté al inicio de tu main.py)
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
@@ -12,67 +12,75 @@ def subir_a_storage(archivo):
     if archivo:
         try:
             nombre_archivo = f"img_{archivo.name}"
-            # Subir el archivo al bucket 'imagenes'
+            # Subir al bucket 'imagenes'
             supabase.storage.from_("imagenes").upload(
                 path=nombre_archivo, 
                 file=archivo.getvalue(), 
                 file_options={"content-type": archivo.type}
             )
-            # Obtener la URL pública
+            # Obtener URL pública
             url_img = supabase.storage.from_("imagenes").get_public_url(nombre_archivo)
             return url_img
         except Exception as e:
-            st.error(f"Error al subir: {e}")
+            st.error(f"Error al subir imagen: {e}")
     return None
 
-st.title("🛒 Gestión de Productos e Imágenes")
+st.title("📦 Gestión de Productos")
 
-# 2. Formulario de Carga
-with st.form("registro_con_foto", clear_on_submit=True):
-    st.subheader("📸 Registrar Nuevo Producto")
+# 2. Formulario de Registro Completo
+with st.form("registro_viveres", clear_on_submit=True):
+    st.subheader("📝 Registrar Nuevo Producto")
+    
     col1, col2 = st.columns(2)
     
     with col1:
         nombre = st.text_input("Nombre del Producto*")
         marca = st.text_input("Marca")
+        tamano = st.number_input("Tamaño / Peso", min_value=0.0, step=0.1)
+        unidad = st.selectbox("Unidad", ["gr", "kg", "ml", "lt", "unidad", "pack"])
         
     with col2:
-        # Opción para subir archivo real
-        archivo_foto = st.file_uploader("Subir foto o Tomar captura", type=['jpg', 'png', 'jpeg'])
+        archivo_foto = st.file_uploader("📸 Subir foto o Tomar captura", type=['jpg', 'png', 'jpeg'])
         url_respaldo = st.text_input("O pegar URL externa (opcional)")
+        st.caption("Si subes un archivo, este tendrá prioridad sobre la URL manual.")
 
     if st.form_submit_button("🚀 Guardar Producto"):
         if nombre:
             url_final = None
             
-            # Prioridad 1: Archivo subido al Storage
+            # Lógica de imagen
             if archivo_foto:
                 url_final = subir_a_storage(archivo_foto)
-            # Prioridad 2: URL manual
             elif url_respaldo:
                 url_final = url_respaldo
             
-            # Guardar en la tabla 'productos'
-            nuevo = {
+            # Guardar en Supabase (campos en minúsculas)
+            nuevo_registro = {
                 "nombre": nombre,
                 "marca": marca,
+                "tamano": tamano,
+                "unidad": unidad,
                 "url_imagen": url_final
             }
-            supabase.table("productos").insert(nuevo).execute()
-            st.success(f"¡{nombre} guardado!")
-            st.balloons()
+            
+            try:
+                supabase.table("productos").insert(nuevo_registro).execute()
+                st.success(f"✅ {nombre} guardado con éxito.")
+                st.balloons()
+            except Exception as e:
+                st.error(f"Error al guardar en la base de datos: {e}")
         else:
-            st.warning("Escribe al menos el nombre.")
+            st.warning("El campo 'Nombre' es obligatorio.")
 
-# 3. Visualización (Para ver si funciona)
+# 3. Tabla Visualizadora
 st.divider()
-st.subheader("📦 Vista Previa del Catálogo")
+st.subheader("📋 Catálogo Actualizado")
 res = supabase.table("productos").select("*").execute()
 if res.data:
     df = pd.DataFrame(res.data)
-    # Mostramos la imagen en la tabla si existe
-    st.data_editor(
-        df,
+    # Configuración para que las imágenes se vean en la tabla
+    st.dataframe(
+        df[['nombre', 'marca', 'tamano', 'unidad', 'url_imagen']],
         column_config={
             "url_imagen": st.column_config.ImageColumn("Vista Previa")
         },
