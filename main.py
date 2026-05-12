@@ -2,68 +2,63 @@ import streamlit as st
 from supabase import create_client
 import pandas as pd
 
-# 1. Conexión (Ya sabemos que funciona)
+# 1. Conexión
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
 st.set_page_config(page_title="Viveres Pro", layout="wide", page_icon="🛒")
-st.title("🛒 Control de Víveres v2.0")
 
-# 2. Barra Lateral para Navegación
-menu = ["📦 Catálogo de Productos", "➕ Registrar Producto", "📊 Dashboard"]
+# 2. Menú Lateral
+menu = ["📊 Dashboard", "📦 Productos", "🏪 Tiendas y Sucursales"]
 choice = st.sidebar.selectbox("Menú Principal", menu)
 
-if choice == "📦 Catálogo de Productos":
-    st.subheader("📦 Productos en Inventario")
-    try:
-        res = supabase.table("productos").select("*").execute()
-        if res.data:
-            df = pd.DataFrame(res.data)
-            # Reordenamos columnas para que se vea mejor
-            cols = ['codigo_barras', 'nombre', 'marca', 'tamano', 'unidad']
-            st.dataframe(df[cols], use_container_width=True)
-        else:
-            st.info("El catálogo está vacío. Ve a 'Registrar Producto' para empezar.")
-    except Exception as e:
-        st.error(f"Error al cargar datos: {e}")
+# --- SECCIÓN: PRODUCTOS (La que ya probamos) ---
+if choice == "📦 Productos":
+    st.title("📦 Gestión de Productos")
+    # ... (aquí va tu formulario de carga anterior) ...
+    # Sugerencia: Añadir un visualizador de lo que ya hay
+    res = supabase.table("productos").select("*").execute()
+    if res.data:
+        st.dataframe(pd.DataFrame(res.data), use_container_width=True)
 
-elif choice == "➕ Registrar Producto":
-    st.subheader("📝 Nuevo Registro de Vívere")
+# --- NUEVA SECCIÓN: TIENDAS ---
+elif choice == "🏪 Tiendas y Sucursales":
+    st.title("🏪 Configuración de Tiendas")
     
-    with st.form("form_registro", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            nombre = st.text_input("Nombre del Producto*", placeholder="Ej: Arroz")
-            marca = st.text_input("Marca", placeholder="Ej: Diana")
-            codigo = st.text_input("Código de Barras", placeholder="EAN-13 / UPC")
-            
-        with col2:
-            tamano = st.number_input("Tamaño (Cantidad)", min_value=0.0, step=0.1)
-            unidad = st.selectbox("Unidad de Medida", ["kg", "gr", "lt", "ml", "unidad", "pack"])
-            url_img = st.text_input("URL de la Imagen", placeholder="https://enlace-a-la-foto.com")
-            
-        submit = st.form_submit_button("🚀 Guardar Producto")
-        
-        if submit:
-            if nombre: # Validación básica
-                nuevo_prod = {
-                    "nombre": nombre,
-                    "marca": marca,
-                    "codigo_barras": codigo if codigo else None,
-                    "tamano": tamano,
-                    "unidad": unidad,
-                    "url_imagen": url_img
-                }
-                try:
-                    supabase.table("productos").insert(nuevo_prod).execute()
-                    st.success(f"¡{nombre} guardado correctamente!")
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"Error al guardar: {e}")
-            else:
-                st.warning("El nombre del producto es obligatorio.")
+    tab1, tab2 = st.tabs(["🏢 Cadenas de Supermercados", "📍 Sucursales Específicas"])
+    
+    with tab1:
+        st.subheader("Registrar Nueva Cadena")
+        with st.form("form_super"):
+            nombre_super = st.text_input("Nombre del Supermercado (Ej: Walmart)")
+            logo = st.text_input("URL del Logo")
+            if st.form_submit_button("Guardar Cadena"):
+                supabase.table("supermercados").insert({"nombre_supermercado": nombre_super, "url_logo": logo}).execute()
+                st.success(f"{nombre_super} agregado.")
+                st.rerun()
 
-elif choice == "📊 Dashboard":
-    st.info("Aquí configuraremos el análisis de ofertas próximamente.")
+    with tab2:
+        st.subheader("Registrar Sucursal")
+        # Obtenemos los supermercados para el menú desplegable
+        supers = supabase.table("supermercados").select("*").execute()
+        if supers.data:
+            df_s = pd.DataFrame(supers.data)
+            dict_supers = dict(zip(df_s['nombre_supermercado'], df_s['id_super']))
+            
+            with st.form("form_sucursal"):
+                cadena = st.selectbox("Selecciona la Cadena", list(dict_supers.keys()))
+                nombre_suc = st.text_input("Nombre de la Sucursal (Ej: Centro)")
+                ciudad = st.text_input("Ciudad")
+                
+                if st.form_submit_button("Guardar Sucursal"):
+                    nueva_suc = {
+                        "id_super": dict_supers[cadena],
+                        "nombre_sucursal": nombre_suc,
+                        "ciudad": ciudad
+                    }
+                    supabase.table("sucursales").insert(nueva_suc).execute()
+                    st.success("Sucursal guardada correctamente.")
+                    st.rerun()
+        else:
+            st.warning("Primero debes registrar al menos un Supermercado en la pestaña anterior.")
