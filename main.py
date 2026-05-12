@@ -96,7 +96,7 @@ elif choice == "📦 Administración de Productos":
                 supabase.table("productos").insert({"nombre": nombre, "marca": marca, "codigo_barras": barras, "tamano": tam, "unidad": uni, "url_imagen": url_img}).execute()
                 st.success("¡Producto registrado!"); st.rerun()
 
-        with t3:
+    with t3:
         st.subheader("⚙️ Gestión de Existentes")
         # Volvemos a consultar para tener datos frescos
         res_p = supabase.table("productos").select("*").order("nombre").execute()
