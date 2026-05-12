@@ -96,22 +96,72 @@ elif choice == "📦 Administración de Productos":
                 supabase.table("productos").insert({"nombre": nombre, "marca": marca, "codigo_barras": barras, "tamano": tam, "unidad": uni, "url_imagen": url_img}).execute()
                 st.success("¡Producto registrado!"); st.rerun()
 
-    with t3:
-        res_p = supabase.table("productos").select("*").execute()
+        with t3:
+        st.subheader("⚙️ Gestión de Existentes")
+        # Volvemos a consultar para tener datos frescos
+        res_p = supabase.table("productos").select("*").order("nombre").execute()
+        
         if res_p.data:
+            # Creamos un diccionario para seleccionar el producto por nombre
             prod_dict = {f"{p['nombre']} - {p['marca']}": p for p in res_p.data}
-            sel = st.selectbox("Selecciona producto", prod_dict.keys())
-            p = prod_dict[sel]
-            with st.form("edit_p"):
-                en = st.text_input("Nombre", p['nombre'])
-                eb = st.text_input("Código de Barras", p['codigo_barras'])
+            sel_nombre = st.selectbox("Selecciona un producto para modificar:", prod_dict.keys(), key="selector_editar")
+            p = prod_dict[sel_nombre]
+    
+            # Formulario de edición con los datos actuales precargados
+            with st.form("edit_p_completo"):
+                st.info(f"Editando: {p['nombre']}")
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    en = st.text_input("Nombre", value=p['nombre'])
+                    em = st.text_input("Marca", value=p['marca'])
+                    eb = st.text_input("Código de Barras", value=p['codigo_barras'] or "")
+                
+                with c2:
+                    et = st.number_input("Tamaño", value=float(p['tamano']) if p['tamano'] else 0.0)
+                    eu = st.selectbox("Unidad", ["gr", "kg", "ml", "lt", "unidad"], index=["gr", "kg", "ml", "lt", "unidad"].index(p['unidad']) if p['unidad'] in ["gr", "kg", "ml", "lt", "unidad"] else 0)
+                    ef = st.file_uploader("Actualizar Foto (dejar vacío para mantener la actual)", type=['jpg', 'png', 'jpeg', 'webp'])
+                
+                # Mostrar miniatura de la foto actual
+                if p['url_imagen']:
+                    st.image(p['url_imagen'], caption="Foto actual", width=150)
+    
                 c_del, c_upd = st.columns(2)
-                if c_upd.form_submit_button("💾 Actualizar"):
-                    supabase.table("productos").update({"nombre": en, "codigo_barras": eb}).eq("id_producto", p['id_producto']).execute()
-                    st.success("Actualizado"); st.rerun()
-                if c_del.form_submit_button("🗑️ Eliminar"):
-                    supabase.table("productos").delete().eq("id_producto", p['id_producto']).execute()
-                    st.warning("Eliminado"); st.rerun()
+                
+                if c_upd.form_submit_button("💾 Guardar Cambios"):
+                    # 1. Si hay foto nueva, la subimos
+                    nueva_url = p['url_imagen']
+                    if ef:
+                        nueva_url = subir_a_storage(ef)
+                    
+                    # 2. Preparamos los datos actualizados
+                    datos_update = {
+                        "nombre": en,
+                        "marca": em,
+                        "codigo_barras": eb,
+                        "tamano": et,
+                        "unidad": eu,
+                        "url_imagen": nueva_url
+                    }
+                    
+                    try:
+                        supabase.table("productos").update(datos_update).eq("id_producto", p['id_producto']).execute()
+                        st.success("✅ Producto actualizado correctamente")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al actualizar: {e}")
+                
+                if c_del.form_submit_button("🗑️ Eliminar Producto"):
+                    # Confirmación visual simple
+                    try:
+                        supabase.table("productos").delete().eq("id_producto", p['id_producto']).execute()
+                        st.warning("⚠️ Producto eliminado")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"No se pudo eliminar. Es posible que el producto tenga ofertas vinculadas.")
+        else:
+            st.info("No hay productos para editar.")
+
 
 # --- SECCIÓN 3: TIENDAS Y SUCURSALES ---
 elif choice == "🏪 Tiendas y Sucursales":
