@@ -35,16 +35,16 @@ st.sidebar.title("Menú Principal")
 menu = ["🔍 Alertas y Ofertas", "📦 Gestión de Productos", "🏪 Tiendas y Sucursales", "🏷️ Registrar Ofertas"]
 choice = st.sidebar.selectbox("Ir a:", menu)
 
-# --- SECCIÓN 1: ALERTAS Y OFERTAS ---
+# --- SECCIÓN 1: ALERTAS Y OFERTAS (CORREGIDA) ---
 if choice == "🔍 Alertas y Ofertas":
-    st.title("🔔 Mis Alertas de Ahorro")
+    st.title("🔔 Mis Alertas y Ofertas")
     
-    # Filtro de Interés: Solo lo que necesito comprar
+    # Buscador de productos para filtrar
     res_p = supabase.table("productos").select("nombre").execute()
     lista_productos = sorted(list(set([p['nombre'] for p in res_p.data]))) if res_p.data else []
-    
-    productos_interes = st.multiselect("⭐ ¿Qué productos necesitas comprar hoy?", lista_productos)
+    productos_interes = st.multiselect("⭐ Filtrar por lo que necesitas comprar hoy:", lista_productos)
 
+    # Consulta de ofertas
     res = supabase.table("ofertas").select("""
         id_oferta, precio_oferta, fecha_fin,
         productos(nombre, marca, url_imagen, tamano, unidad),
@@ -54,35 +54,56 @@ if choice == "🔍 Alertas y Ofertas":
 
     if res.data:
         df = pd.json_normalize(res.data)
+        
+        # Filtro: Si el usuario seleccionó productos, filtramos; si no, mostramos TODO
         if productos_interes:
             df = df[df['productos.nombre'].isin(productos_interes)]
 
-        for _, o in df.iterrows():
-            fecha_v = datetime.strptime(o['fecha_fin'], '%Y-%m-%d').date()
-            dias = (fecha_v - date.today()).days
-            
-            with st.container(border=True):
-                c1, c2, c3 = st.columns([1, 2, 1])
-                with c1:
-                    st.image(o['productos.url_imagen'] or "https://placeholder.com", use_container_width=True)
-                with c2:
-                    st.subheader(f"{o['productos.nombre']} - {o['productos.marca']}")
-                    st.write(f"🏢 {o['supermercados.nombre_supermercado']} ({o['sucursales.nombre_sucursal'] or 'Todas las sucursales'})")
-                    if 0 <= dias <= 2:
-                        st.error(f"🚨 ¡URGENTE! Vence en {dias} días ({fecha_v.strftime('%d/%m/%Y')})")
-                    elif dias < 0:
-                        st.write("❌ Oferta vencida")
-                    else:
-                        st.info(f"⏳ Vence el {fecha_v.strftime('%d/%m/%Y')}")
-                with c3:
-                    st.metric("PRECIO", f"${o['precio_oferta']}")
+        if not df.empty:
+            # Ordenamos para que las que vencen pronto salgan ARRIBA
+            df['fecha_dt'] = pd.to_datetime(df['fecha_fin'])
+            df = df.sort_values(by='fecha_dt')
+
+            for _, o in df.iterrows():
+                fecha_v = o['fecha_dt'].date()
+                dias = (fecha_v - date.today()).days
+                
+                # Diseño de Tarjeta Estético
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([1, 2, 1])
+                    
+                    with c1:
+                        # Imagen del producto
+                        st.image(o['productos.url_imagen'] or "https://placeholder.com", use_container_width=True)
+                    
+                    with c2:
+                        # Información del producto y tienda
+                        st.subheader(f"{o['productos.nombre']} - {o['productos.marca']}")
+                        st.write(f"🏢 {o['supermercados.nombre_supermercado']}")
+                        st.caption(f"📍 {o['sucursales.nombre_sucursal'] or 'Todas las sucursales'}")
+                        
+                        # ALERTA VISUAL DE URGENCIA
+                        if 0 <= dias <= 2:
+                            st.error(f"🚨 ¡QUEDA POCO TIEMPO! Vence en {dias} día(s) ({fecha_v.strftime('%d/%m/%Y')})")
+                        elif dias < 0:
+                            st.warning("⚠️ Esta oferta ya caducó")
+                        else:
+                            st.info(f"⏳ Disponible hasta: {fecha_v.strftime('%d/%m/%Y')}")
+                    
+                    with c3:
+                        # Precio resaltado
+                        st.write("Precio Oferta:")
+                        st.header(f"${o['precio_oferta']}")
+        else:
+            st.warning("No hay ofertas para los productos seleccionados.")
+    else:
+        st.info("Aún no has registrado ninguna oferta.")
 
 # --- SECCIÓN 2: GESTIÓN DE PRODUCTOS (CON EDICIÓN Y BORRADO) ---
 elif choice == "📦 Gestión de Productos":
     st.title("📦 Administración de Productos")
     t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar/Borrar"])
     
-    # Consulta fresca de productos
     res_p = supabase.table("productos").select("*").order("nombre").execute()
     df_p = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
 
