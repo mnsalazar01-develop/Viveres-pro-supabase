@@ -7,16 +7,19 @@ url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase = create_client(url, key)
 
-# --- FUNCIÓN PARA SUBIR A STORAGE ---
+# --- FUNCIÓN PARA SUBIR A STORAGE (ACTUALIZADA PARA WEBP) ---
 def subir_a_storage(archivo):
     if archivo:
         try:
-            nombre_archivo = f"img_{archivo.name}"
+            # Quitamos espacios y caracteres raros del nombre
+            nombre_limpio = archivo.name.replace(" ", "_")
+            nombre_archivo = f"img_{nombre_limpio}"
+            
             # Subir al bucket 'imagenes'
             supabase.storage.from_("imagenes").upload(
                 path=nombre_archivo, 
                 file=archivo.getvalue(), 
-                file_options={"content-type": archivo.type}
+                file_options={"content-type": archivo.type} # Detecta image/webp automáticamente
             )
             # Obtener URL pública
             url_img = supabase.storage.from_("imagenes").get_public_url(nombre_archivo)
@@ -25,7 +28,13 @@ def subir_a_storage(archivo):
             st.error(f"Error al subir imagen: {e}")
     return None
 
-st.title("📦 Gestión de Productos")
+# --- EN EL FORMULARIO DE REGISTRO ---
+# Agregamos 'webp' a la lista de tipos
+#archivo_foto = st.file_uploader(
+#    "📸 Subir foto o Tomar captura", 
+#    type=['jpg', 'png', 'jpeg', 'webp'] 
+#)
+
 
 # 2. Formulario de Registro Completo
 with st.form("registro_viveres", clear_on_submit=True):
@@ -40,7 +49,7 @@ with st.form("registro_viveres", clear_on_submit=True):
         unidad = st.selectbox("Unidad", ["gr", "kg", "ml", "lt", "unidad", "pack"])
         
     with col2:
-        archivo_foto = st.file_uploader("📸 Subir foto o Tomar captura", type=['jpg', 'png', 'jpeg'])
+        archivo_foto = st.file_uploader("📸 Subir foto o Tomar captura", type=['jpg', 'png', 'jpeg', 'webp'])
         url_respaldo = st.text_input("O pegar URL externa (opcional)")
         st.caption("Si subes un archivo, este tendrá prioridad sobre la URL manual.")
 
