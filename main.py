@@ -34,7 +34,7 @@ st.sidebar.title("Menú Principal")
 menu = ["🔍 Alertas y Ofertas", "📦 Gestión de Productos", "🏪 Tiendas y Sucursales", "🏷️ Registrar Ofertas"]
 choice = st.sidebar.selectbox("Ir a:", menu)
 
-# --- SECCIÓN 1: ALERTAS Y OFERTAS (CON COMPARADOR INTEGRADO) ---
+# --- SECCIÓN 1: ALERTAS Y OFERTAS (COMPLETAMENTE BLINDADA) ---
 if choice == "🔍 Alertas y Ofertas":
     st.title("🔔 Mis Alertas y Ofertas")
     
@@ -47,7 +47,7 @@ if choice == "🔍 Alertas y Ofertas":
         
     productos_interes = st.multiselect("⭐ Filtrar por lo que necesitas comprar hoy:", lista_productos)
 
-    # Consulta de ofertas en tiempo real
+    # Consulta unificada en tiempo real
     try:
         res = supabase.table("ofertas").select("""
             id_oferta, precio_oferta, fecha_fin, id_producto,
@@ -60,17 +60,33 @@ if choice == "🔍 Alertas y Ofertas":
         res = None
 
     if res and res.data:
+        # Normalizamos de forma segura manejando nulos
         df = pd.json_normalize(res.data)
         
+        # Aseguramos la existencia de las columnas críticas para evitar KeyError
+        columnas_criticas = {
+            'productos.nombre': 'Producto Desconocido',
+            'productos.marca': '',
+            'productos.url_imagen': '',
+            'productos.tamano': 0,
+            'productos.unidad': 'ud',
+            'supermercados.nombre_supermercado': 'Supermercado',
+            'sucursales.nombre_sucursal': 'Todas las sucursales'
+        }
+        for col, defecto in columnas_criticas.items():
+            if col not in df.columns:
+                df[col] = defecto
+            else:
+                df[col] = df[col].fillna(defecto)
+
         if productos_interes:
             df = df[df['productos.nombre'].isin(productos_interes)]
 
         if not df.empty:
             df['fecha_dt'] = pd.to_datetime(df['fecha_fin'])
             
-            # AGRUPAMOS POR PRODUCTO PARA EL COMPARADOR LADO A LADO
+            # AGRUPAMOS POR PRODUCTO PARA COMPARADOR LADO A LADO
             for prod_id, grupo in df.groupby('id_producto'):
-                # Ordenamos las ofertas de este producto del más barato al más caro
                 grupo_ordenado = grupo.sort_values(by='precio_oferta')
                 
                 p_nombre = grupo_ordenado['productos.nombre'].iloc[0]
@@ -79,7 +95,6 @@ if choice == "🔍 Alertas y Ofertas":
                 p_tam = grupo_ordenado['productos.tamano'].iloc[0]
                 p_uni = grupo_ordenado['productos.unidad'].iloc[0]
                 
-                # Tarjeta contenedora del producto
                 with st.container(border=True):
                     c_img, c_info = st.columns([1, 3])
                     
@@ -90,7 +105,6 @@ if choice == "🔍 Alertas y Ofertas":
                         st.subheader(f"{p_nombre} - {p_marca} ({p_tam} {p_uni})")
                         st.write("🛒 **Opciones disponibles en el mercado:**")
                         
-                        # Creamos columnas dinámicas para poner los supermercados lado a lado
                         num_ofertas = len(grupo_ordenado)
                         columnas_tiendas = st.columns(num_ofertas)
                         
@@ -98,23 +112,21 @@ if choice == "🔍 Alertas y Ofertas":
                             fecha_v = fila['fecha_dt'].date()
                             dias = (fecha_v - date.today()).days
                             
-                            # El primero de la lista (i == 0) siempre será el más barato gracias al sort_values
                             es_el_mas_barato = (i == 0)
                             borde_color = "#2bc443" if es_el_mas_barato else "#cccccc"
                             badge_ganador = "🏆 MEJOR PRECIO" if es_el_mas_barato else "Oferta"
+                            suc_texto = fila['sucursales.nombre_sucursal']
                             
                             with columnas_tiendas[i]:
-                                # Cuadro visual para cada supermercado
                                 st.markdown(f"""
-                                    <div style="border: 2px solid {borde_color}; border-radius: 8px; padding: 10px; text-align: center; background-color: {'#f0fff4' if es_el_mas_barato else '#ffffff'};">
+                                    <div style="border: 2px solid {borde_color}; border-radius: 8px; padding: 10px; text-align: center; background-color: {'#f0fff4' if es_el_mas_barato else '#ffffff'}; margin-bottom: 10px;">
                                         <b style="color: {'#2bc443' if es_el_mas_barato else '#555555'}; font-size: 0.85em;">{badge_ganador}</b>
                                         <h4 style="margin: 5px 0 0 0; color: #333333;">{fila['supermercados.nombre_supermercado']}</h4>
-                                        <p style="margin: 0; font-size: 0.75em; color: gray;">{fila['sucursales.nombre_sucursal'] or 'Todas las sucursales'}</p>
+                                        <p style="margin: 0; font-size: 0.75em; color: gray;">{suc_texto}</p>
                                     </div>
                                 """, unsafe_allow_html=True)
                                 
-                                # Mostramos el precio y el semáforo de urgencia debajo del cuadro
-                                st.metric(label="Precio", value=f"${fila['precio_oferta']}")
+                                st.metric(label="Precio", value=f"${fila['precio_oferta']:.2f}")
                                 
                                 if 0 <= dias <= 2:
                                     st.error(f"🚨 ¡CORRE! Vence en {dias} día(s)")
@@ -275,10 +287,13 @@ elif choice == "🏷️ Registrar Ofertas":
                 
                 if st.form_submit_button("Publicar Oferta"):
                     try:
+                        # Corregido: Insert directo del id_sucursal sin llaves extras
                         supabase.table("ofertas").insert({
-                            "id_producto": p_dict[p_sel], "id_super": super_dict[super_sel],
-                            "id_sucursal": {suc_dict[suc_sel]} if suc_dict[suc_sel] is not None else None,
-                            "precio_oferta": precio, "fecha_fin": str(vence)
+                            "id_producto": p_dict[p_sel], 
+                            "id_super": super_dict[super_sel],
+                            "id_sucursal": suc_dict[suc_sel],
+                            "precio_oferta": precio, 
+                            "fecha_fin": str(vence)
                         }).execute()
                         st.success("¡Oferta publicada exitosamente!"); st.balloons()
                     except Exception as e:
