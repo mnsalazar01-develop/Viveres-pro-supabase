@@ -2,11 +2,11 @@ import streamlit as st
 import pandas as pd
 
 if "supabase" not in st.session_state:
-    st.error("No se encontró la conexión central. Por favor, ve al Inicio.")
+    st.error("Conexión no encontrada. Ve al inicio.")
     st.stop()
 
 supabase = st.session_state["supabase"]
-st.title("🏷️ Cargar Ofertas por Catálogo")
+st.title("🏷️ Registrar Ofertas por Catálogo")
 
 try:
     res_c = supabase.table("categorias").select("id_cat, nombre").order("id_cat").execute()
@@ -37,12 +37,24 @@ if supers and supers.data:
         p_dict = dict(zip(p_df['label_visual'], p_df['id_producto']))
         lista_prods_ordenada = sorted(list(p_dict.keys()))
         
-        with st.form("form_of"):
+        with st.form("form_of", clear_on_submit=True):
             p_sel = st.selectbox("Producto en oferta", lista_prods_ordenada)
             precio = st.number_input("Precio Oferta", min_value=0.0, format="%.2f")
-            vence = st.date_input("¿Cuándo termina la promoción?", format="DD/MM/YYYY")
-            if st.form_submit_button("Publicar Oferta"):
+            
+            c_fecha1, c_fecha2 = st.columns(2)
+            inicio = c_fecha1.date_input("Fecha de Inicio", format="DD/MM/YYYY")
+            vence = c_fecha2.date_input("Fecha de Vencimiento", format="DD/MM/YYYY")
+            
+            if st.form_submit_button("🚀 Publicar Oferta en el Mercado"):
                 try:
-                    supabase.table("ofertas").insert({"id_producto": p_dict[p_sel], "id_super": super_dict[super_sel], "id_sucursal": suc_dict[suc_sel], "precio_oferta": precio, "fecha_fin": str(vence)}).execute()
-                    st.success("¡Oferta publicada exitosamente!"); st.balloons()
-                except Exception as e: st.error(f"Error: {e}")
+                    supabase.table("ofertas").insert({
+                        "id_producto": p_dict[p_sel], 
+                        "id_super": super_dict[super_sel],
+                        "id_sucursal": suc_dict[suc_sel], 
+                        "precio_oferta": precio, 
+                        "fecha_inicio": str(inicio),
+                        "fecha_fin": str(vence)
+                    }).execute()
+                    st.success("¡Oferta publicada exitosamente con su vigencia completa!"); st.balloons()
+                except Exception as e: st.error(f"Error al guardar oferta: {e}")
+else: st.warning("Primero debes registrar un Supermercado.")
