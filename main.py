@@ -11,6 +11,8 @@ def init_connection():
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 supabase = init_connection()
+
+# --- IMAGEN REAL DE RESPALDO PARA PRODUCTOS SIN FOTO ---
 URL_DEFECTO = "flaticon.com"
 
 # --- FUNCIONES DE SOPORTE MAESTRAS ---
@@ -95,9 +97,12 @@ if choice == "🔍 Alertas y Ofertas":
                 grp = grupo.sort_values(by='precio_oferta')
                 with st.container(border=True):
                     c_img, c_info = st.columns(2)
-                    with c_img: st.image(grp['prod_imagen'].iloc if grp['prod_imagen'].iloc and str(grp['prod_imagen'].iloc).strip() != "" else URL_DEFECTO, use_container_width=True)
+                    with c_img: 
+                        img_val = grp['prod_imagen'].iloc
+                        st.image(img_val if img_val and str(img_val).strip() != "" else URL_DEFECTO, use_container_width=True)
                     with c_info:
                         st.subheader(f"{grp['prod_nombre'].iloc} - {grp['prod_marca'].iloc} ({grp['prod_tamano'].iloc} {grp['prod_unidad'].iloc})")
+                        st.write("🛒 **Comparativa de Opciones Disponibles:**")
                         cols_tiendas = st.columns(len(grp))
                         for i, (_, f) in enumerate(grp.iterrows()):
                             hoy = date.today()
