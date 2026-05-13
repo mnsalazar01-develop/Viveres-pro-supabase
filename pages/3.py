@@ -72,7 +72,7 @@ with t1:
 with t2:
     st.subheader("Formulario de Carga Ágil")
     
-    # AUTOCOMPLETAR INTELIGENTE (Punto 1): Buscador superior en tiempo real
+    # AUTOCOMPLETAR INTELIGENTE: Buscador superior en tiempo real
     lista_autocompletar = ["➕ Registrar Producto Nuevo (Campos Vacíos)"]
     prod_mapeo = {}
     if not df_p.empty:
@@ -92,7 +92,7 @@ with t2:
     val_marca = p_ref.get("marca", "")
     val_barras = p_ref.get("codigo_barras", "")
     
-    # AJUSTE DE TAMAÑO LIMPIO (Punto 2): Si es nuevo, arranca en None (vacío)
+    # AJUSTE DE TAMAÑO LIMPIO: Si es nuevo, arranca en None (vacío)
     val_tamano = float(p_ref["tamano"]) if "tamano" in p_ref and p_ref["tamano"] is not None else None
     
     idx_unidad = ["gr", "kg", "ml", "lt", "unidad"].index(p_ref["unidad"]) if "unidad" in p_ref and p_ref["unidad"] in ["gr", "kg", "ml", "lt", "unidad"] else 0
@@ -105,7 +105,7 @@ with t2:
     marca = c2.text_input("Marca", value=val_marca, key="n_mar")
     barras = c1.text_input("Código de Barras", value=val_barras, key="n_bar").strip()
     
-    # CONTADOR EN UNIDADES ENTERAS (Punto 3): step=1.0 e inicio en blanco (value=val_tamano)
+    # CONTADOR EN UNIDADES ENTERAS: step=1.0 e inicio en blanco (value=val_tamano)
     tam = c2.number_input("Tamaño / Peso (Sube de 1 en 1)", min_value=0.0, step=1.0, value=val_tamano, key="n_tam")
     uni = c1.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], index=idx_unidad, key="n_uni")
     foto = c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
@@ -166,7 +166,8 @@ with t3:
         eu = ec1.selectbox("Modificar Unidad", ["gr", "kg", "ml", "lt", "unidad"], index=["gr", "kg", "ml", "lt", "unidad"].index(p_e['unidad']) if p_e['unidad'] in ["gr", "kg", "ml", "lt", "unidad"] else 0)
         ef = ec2.file_uploader("Cambiar Imagen", type=['jpg', 'png', 'jpeg', 'webp'])
         
-        c_act = c_inv_dict.get(p_e['id_cat'], "--- Seleccionar ---")
+        # VARIABLE CORREGIDA AQUÍ: Cambiado c_inv_dict por cat_inv_dict
+        c_act = cat_inv_dict.get(p_e['id_cat'], "--- Seleccionar ---")
         l_cat_e = ["--- Seleccionar ---"] + lista_cat
         ecat = ec1.selectbox("Modificar Categoría Principal", l_cat_e, index=l_cat_e.index(c_act) if c_act in l_cat_e else 0, key="e_c")
         
