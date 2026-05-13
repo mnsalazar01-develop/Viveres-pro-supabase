@@ -174,9 +174,11 @@ elif choice == "📦 Gestión de Productos":
         res_p = supabase.table("productos").select("*").order("nombre").execute()
         df_p = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
         
-        res_c = supabase.table("categorias").select("*").order("nombre").execute()
+        # ORDEN NUMÉRICO POR ID_CAT (Utilizando el orden del script)
+        res_c = supabase.table("categorias").select("*").order("id_cat").execute()
         cat_dict = {c['nombre']: c['id_cat'] for c in res_c.data} if res_c.data else {}
         cat_inv_dict = {c['id_cat']: c['nombre'] for c in res_c.data} if res_c.data else {}
+        lista_categorias_ordenada = [c['nombre'] for c in res_c.data] if res_c.data else []
 
         res_sc = supabase.table("subcategorias").select("*").order("nombre").execute()
         subcat_inv_dict = {sc['id_subcat']: sc['nombre'] for sc in res_sc.data} if res_sc.data else {}
@@ -185,6 +187,7 @@ elif choice == "📦 Gestión de Productos":
         cat_dict = {}
         cat_inv_dict = {}
         subcat_inv_dict = {}
+        lista_categorias_ordenada = []
 
     with t1:
         if not df_p.empty:
@@ -198,24 +201,28 @@ elif choice == "📦 Gestión de Productos":
             st.info("El catálogo está vacío.")
             
     with t2:
-        with st.form("nuevo_p", clear_on_submit=True):
+        # SACAMOS EL SELECTOR DE CATEGORÍA FUERA DEL FORMULARIO PARA REFRESCAR LA SUBCATEGORÍA AL INSTANTE
+        st.subheader("📝 Registrar Nuevo Vívere")
+        categoria_sel = st.selectbox("1. Selecciona la Categoría Principal (Orden Numérico):", ["--- Seleccionar ---"] + lista_categorias_ordenada, key="cat_nuevo_p")
+        
+        # Buscamos subcategorías dinámicas ligadas al padre seleccionado
+        subcat_opciones = ["--- Seleccionar ---"]
+        if categoria_sel != "--- Seleccionar ---":
+            id_cat_actual = cat_dict[categoria_sel]
+            res_sub_filtradas = supabase.table("subcategorias").select("*").eq("id_cat", id_cat_actual).order("nombre").execute()
+            if res_sub_filtradas.data:
+                subcat_opciones += [s['nombre'] for s in res_sub_filtradas.data]
+        
+        subcategoria_sel = st.selectbox("2. Selecciona la Subcategoría (Actualización Inmediata):", subcat_opciones, key="subcat_nuevo_p")
+
+        with st.form("nuevo_p_datos", clear_on_submit=True):
+            st.write("3. Completa los detalles del producto:")
             col1, col2 = st.columns(2)
             nombre = col1.text_input("Nombre*")
             marca = col2.text_input("Marca")
             barras = col1.text_input("Código de Barras").strip()
             tam = col2.number_input("Tamaño/Peso", min_value=0.0, step=0.1)
             uni = col1.selectbox("Unidad", ["gr", "kg", "ml", "lt", "unidad"])
-            
-            categoria_sel = col1.selectbox("Categoría Principal", ["--- Seleccionar ---"] + list(cat_dict.keys()))
-            
-            subcat_opciones = ["--- Seleccionar ---"]
-            if categoria_sel != "--- Seleccionar ---":
-                id_cat_actual = cat_dict[categoria_sel]
-                res_sub_filtradas = supabase.table("subcategorias").select("*").eq("id_cat", id_cat_actual).order("nombre").execute()
-                if res_sub_filtradas.data:
-                    subcat_opciones += [s['nombre'] for s in res_sub_filtradas.data]
-            
-            subcategoria_sel = col1.selectbox("Subcategoría", subcat_opciones)
             foto = col2.file_uploader("Foto", type=['jpg', 'png', 'jpeg', 'webp'])
             forzar_guardado = st.checkbox("⚠️ Forzar el registro")
 
@@ -229,7 +236,7 @@ elif choice == "📦 Gestión de Productos":
                         id_cat_val = cat_dict[categoria_sel] if categoria_sel != "--- Seleccionar ---" else None
                         
                         id_subcat_val = None
-                        if subcategoria_sel != "--- Seleccionar ---":
+                        if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
                             sub_buscar = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                             if sub_buscar.data:
                                 id_subcat_val = sub_buscar.data[0]['id_subcat']
@@ -252,30 +259,33 @@ elif choice == "📦 Gestión de Productos":
             sel = st.selectbox("Selecciona producto para modificar:", list(prod_dict.keys()))
             p = prod_dict[sel]
             
-            with st.form("edit_p"):
+            # EXTRACTORES INTERNOS FUERA DEL FORM DE EDICIÓN PARA COMPORTAMIENTO EN CASCADA
+            cat_actual_db = cat_inv_dict.get(p['id_cat'], "--- Seleccionar ---")
+            cat_lista_edicion = ["--- Seleccionar ---"] + lista_categorias_ordenada
+            idx_cat_defecto = cat_lista_edicion.index(cat_actual_db) if cat_actual_db in cat_lista_edicion else 0
+            
+            ecat = st.selectbox("1. Modificar Categoría Principal:", cat_lista_edicion, index=idx_cat_defecto, key="cat_edit_p")
+            
+            subcat_actual_db = subcat_inv_dict.get(p['id_subcat'], "--- Seleccionar ---")
+            subcat_lista_edicion = ["--- Seleccionar ---"]
+            if ecat != "--- Seleccionar ---":
+                res_sub_edit = supabase.table("subcategorias").select("*").eq("id_cat", cat_dict[ecat]).order("nombre").execute()
+                if res_sub_edit.data:
+                    subcat_lista_edicion += [s['nombre'] for s in res_sub_edit.data]
+            
+            idx_sub_defecto = subcat_lista_edicion.index(subcat_actual_db) if subcat_actual_db in subcat_lista_edicion else 0
+            esubcat = st.selectbox("2. Modificar Subcategoría:", subcat_lista_edicion, index=idx_sub_defecto, key="subcat_edit_p")
+            
+            with st.form("edit_p_datos"):
+                st.write("3. Ajustar campos complementarios:")
                 en = st.text_input("Nombre", p['nombre'])
                 em = st.text_input("Marca", p['marca'])
                 eb = st.text_input("Código de Barras", p['codigo_barras'] or "").strip()
                 et = st.number_input("Tamaño", value=float(p['tamano']) if p['tamano'] else 0.0)
                 eu = st.selectbox("Unidad", ["gr", "kg", "ml", "lt", "unidad"], index=["gr", "kg", "ml", "lt", "unidad"].index(p['unidad']) if p['unidad'] in ["gr", "kg", "ml", "lt", "unidad"] else 0)
-                
-                cat_actual = cat_inv_dict.get(p['id_cat'], "--- Seleccionar ---")
-                cat_lista = ["--- Seleccionar ---"] + list(cat_dict.keys())
-                idx_cat = cat_lista.index(cat_actual) if cat_actual in cat_lista else 0
-                ecat = st.selectbox("Categoría Principal", cat_lista, index=idx_cat)
-                
-                subcat_actual = subcat_inv_dict.get(p['id_subcat'], "--- Seleccionar ---")
-                subcat_lista = ["--- Seleccionar ---"]
-                if ecat != "--- Seleccionar ---":
-                    res_sub_edit = supabase.table("subcategorias").select("*").eq("id_cat", cat_dict[ecat]).order("nombre").execute()
-                    if res_sub_edit.data:
-                        subcat_lista += [s['nombre'] for s in res_sub_edit.data]
-                
-                idx_sub = subcat_lista.index(subcat_actual) if subcat_actual in subcat_lista else 0
-                esubcat = st.selectbox("Subcategoría", subcat_lista, index=idx_sub)
-                
                 ef = st.file_uploader("Cambiar Foto", type=['jpg', 'png', 'jpeg', 'webp'])
                 forzar_edit = st.checkbox("⚠️ Forzar cambios")
+                
                 c_del, c_upd = st.columns(2)
                 
                 if c_upd.form_submit_button("💾 Guardar Cambios"):
@@ -287,7 +297,7 @@ elif choice == "📦 Gestión de Productos":
                         id_cat_val = cat_dict[ecat] if ecat != "--- Seleccionar ---" else None
                         
                         id_subcat_val = None
-                        if esubcat != "--- Seleccionar ---":
+                        if esubcat != "--- Seleccionar ---" and id_cat_val is not None:
                             sub_b = supabase.table("subcategorias").select("id_subcat").eq("nombre", esubcat).eq("id_cat", id_cat_val).execute()
                             if sub_b.data:
                                 id_subcat_val = sub_b.data[0]['id_subcat']
@@ -314,11 +324,12 @@ elif choice == "📁 Estructura (Cat/Subcat)":
     t1, t2 = st.tabs(["📁 Categorías Principales", "🌿 Subcategorías (Hijos)"])
     
     try:
-        res_c = supabase.table("categorias").select("*").order("nombre").execute()
+        # ORDEN NUMÉRICO OBLIGATORIO POR ID_CAT
+        res_c = supabase.table("categorias").select("*").order("id_cat").execute()
         df_c = pd.DataFrame(res_c.data) if res_c.data else pd.DataFrame()
         cat_dict = {c['nombre']: c['id_cat'] for c in res_c.data} if res_c.data else {}
         
-        res_sc = supabase.table("subcategorias").select("*, categorias(nombre)").execute()
+        res_sc = supabase.table("subcategorias").select("*, categorias(nombre, id_cat)").execute()
         df_sc = pd.json_normalize(res_sc.data) if res_sc.data else pd.DataFrame()
     except:
         df_c = pd.DataFrame()
@@ -330,7 +341,8 @@ elif choice == "📁 Estructura (Cat/Subcat)":
         c_ver, c_add = st.columns(2)
         with c_ver:
             if not df_c.empty:
-                st.dataframe(df_c, use_container_width=True)
+                st.write("Listado ordenado por número de Categoría:")
+                st.dataframe(df_c[['id_cat', 'nombre']], use_container_width=True)
         with c_add:
             with st.form("new_cat"):
                 n_cat = st.text_input("Nueva Categoría Principal")
@@ -346,8 +358,10 @@ elif choice == "📁 Estructura (Cat/Subcat)":
         with sc_add:
             if not df_c.empty:
                 with st.form("new_subcat"):
-                    cat_padre = st.selectbox("Selecciona Categoría Padre:", list(cat_dict.keys()))
-                    n_subcat = st.text_input("Nombre de Subcategoría (Ej: Yogures, Detergentes)")
+                    # Desplegable ordenado numéricamente
+                    lista_cat_ord = [c['nombre'] for c in res_c.data]
+                    cat_padre = st.selectbox("Selecciona Categoría Padre (Orden Numérico):", lista_cat_ord)
+                    n_subcat = st.text_input("Nombre de Subcategoría (Ej: Yogures)")
                     if st.form_submit_button("Guardar Subcategoría"):
                         if n_subcat:
                             supabase.table("subcategorias").insert({"nombre": n_subcat, "id_cat": cat_dict[cat_padre]}).execute()
@@ -358,8 +372,9 @@ elif choice == "📁 Estructura (Cat/Subcat)":
         with sc_view:
             if not df_sc.empty:
                 st.write("🌿 Subcategorías Registradas:")
-                df_sc_limpio = df_sc.rename(columns={'nombre': 'Subcategoría', 'categorias.nombre': 'Categoría Padre'})
-                st.dataframe(df_sc_limpio[['Subcategoría', 'Categoría Padre']], use_container_width=True)
+                df_sc_ordenado = df_sc.sort_values(by='categorias.id_cat')
+                df_sc_limpio = df_sc_ordenado.rename(columns={'nombre': 'Subcategoría', 'categorias.nombre': 'Categoría Padre', 'categorias.id_cat': 'N° Cat'})
+                st.dataframe(df_sc_limpio[['N° Cat', 'Categoría Padre', 'Subcategoría']], use_container_width=True)
 
 # --- SECCIÓN 4: TIENDAS Y SUCURSALES ---
 elif choice == "🏪 Tiendas y Sucursales":
@@ -422,7 +437,7 @@ elif choice == "🏪 Tiendas y Sucursales":
                         eciu = st.text_input("Ciudad", value=suc_data['ciudad'] if 'ciudad' in suc_data else "")
                         b1, b2 = st.columns(2)
                         if b1.form_submit_button("💾 Actualizar"):
-                            supabase.table("sucursales").update({"nombre_sucursal": esuc_name, "ciudad": eciu}).eq("id_sucursal", suc_data['id_sucursal']).execute()
+                            supabase.table("sucursales").update("nombre_sucursal", esuc_name, "ciudad", eciu).eq("id_sucursal", suc_data['id_sucursal']).execute()
                             st.success("Actualizado."); st.rerun()
                         if b2.form_submit_button("🗑️ Borrar"):
                             supabase.table("sucursales").delete().eq("id_sucursal", suc_data['id_sucursal']).execute()
@@ -432,9 +447,14 @@ elif choice == "🏪 Tiendas y Sucursales":
 elif choice == "🏷️ Registrar Ofertas":
     st.title("🏷️ Cargar Ofertas por Catálogo")
     try:
+        # ORDEN NUMÉRICO POR ID_CAT AL BUSCAR PRODUCTOS ASOCIADOS EN OFERTAS
+        res_c_of = supabase.table("categorias").select("id_cat, nombre").order("id_cat").execute()
+        cat_inv_of = {c['id_cat']: c['nombre'] for c in res_c_of.data} if res_c_of.data else {}
+
         supers = supabase.table("supermercados").select("*").order("nombre_supermercado").execute()
     except:
         supers = None
+        cat_inv_of = {}
 
     if supers and supers.data:
         df_s = pd.DataFrame(supers.data)
@@ -452,24 +472,30 @@ elif choice == "🏷️ Registrar Ofertas":
         suc_sel = st.selectbox("¿Aplica a una sucursal específica?", list(suc_dict.keys()))
         
         try:
-            prods = supabase.table("productos").select("id_producto, nombre, marca").execute()
+            prods = supabase.table("productos").select("id_producto, nombre, marca, id_cat").execute()
         except:
             prods = None
 
         if prods and prods.data:
             p_df = pd.DataFrame(prods.data)
-            p_dict = dict(zip(p_df['nombre'] + " (" + p_df['marca'] + ")", p_df['id_producto']))
+            p_df['cat_nombre'] = p_df['id_cat'].map(cat_inv_of).fillna("Sin Categoría")
+            
+            # Mostramos la categoría en la lista para que sea transparente el ordenamiento numérico
+            p_df['label_visual'] = "[" + p_df['cat_nombre'] + "] " + p_df['nombre'] + " (" + p_df['marca'] + ")"
+            p_dict = dict(zip(p_df['label_visual'], p_df['id_producto']))
+            
+            # Ordenamos la lista de selección por el nombre de la categoría mapeada por ID numérico
+            lista_prods_ordenada = sorted(list(p_dict.keys()))
             
             with st.form("form_of"):
-                p_sel = st.selectbox("Producto en oferta", list(p_dict.keys()))
+                p_sel = st.selectbox("Producto en oferta", lista_prods_ordenada)
                 precio = st.number_input("Precio Oferta", min_value=0.0, format="%.2f")
                 vence = st.date_input("¿Cuándo termina la promoción?", format="DD/MM/YYYY")
                 if st.form_submit_button("Publicar Oferta"):
                     try:
                         supabase.table("ofertas").insert({
                             "id_producto": p_dict[p_sel], "id_super": super_dict[super_sel],
-                            "id_sucursal": {suc_dict[suc_sel]} if suc_dict[suc_sel] is not None else None,
-                            "precio_oferta": precio, "fecha_fin": str(vence)
+                            "id_sucursal": suc_dict[suc_sel], "precio_oferta": precio, "fecha_fin": str(vence)
                         }).execute()
                         st.success("¡Oferta publicada exitosamente!"); st.balloons()
                     except Exception as e:
