@@ -13,7 +13,7 @@ def init_connection():
 supabase = init_connection()
 URL_FOTO_DEFECTO = "flaticon.com"
 
-# --- FUNCIONES DE SOPORTE ---
+# --- FUNCIÓN PARA SUBIR IMÁGENES ---
 def subir_a_storage(archivo):
     if archivo:
         try:
@@ -45,7 +45,7 @@ def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir
 
 # 2. MENÚ LATERAL DE NAVEGACIÓN
 st.sidebar.title("Menú Principal")
-menu = ["🔍 Alertas y Ofertas", "📊 Reportes de Mercado", "📦 Gestión de Productos", "📁 Estructura (Cat/Subcat)", "🏪 Tiendas y Sucursales", "🏷️ Registrar Ofertas"]
+menu = ["🔍 Alertas y Ofertas", "📊 Reportes Analíticos", "📦 Gestión de Productos", "📁 Estructura (Cat/Subcat)", "🏪 Tiendas y Sucursales", "🏷️ Registrar Ofertas"]
 choice = st.sidebar.selectbox("Ir a:", menu)
 
 # --- CONSULTAS DE DATOS GLOBALES MAESTROS ---
@@ -56,12 +56,12 @@ try:
     lista_cat = [c['nombre'] for c in res_cat.data] if res_cat.data else []
 
     res_sub = supabase.table("subcategorias").select("*").order("nombre").execute()
-    sc_dict = {f"{s['nombre']} (Cat {s['id_cat']})": s['id_subcat'] for s in res_sub.data} if res_sub.data else {}
+    sc_dict = {s['nombre']: s['id_subcat'] for s in res_sub.data} if res_sub.data else {}
     sc_inv = {s['id_subcat']: s['nombre'] for s in res_sub.data} if res_sub.data else {}
 except:
     c_dict, c_inv, lista_cat, sc_dict, sc_inv = {}, {}, [], {}, {}
 
-# --- SECCIÓN 1: ALERTAS Y OFERTAS (CORREGIDA CON TIENDAS VISIBLES) ---
+# --- SECCIÓN 1: ALERTAS Y OFERTAS (FIJADO SUPERMERCADO Y SUCURSAL) ---
 if choice == "🔍 Alertas y Ofertas":
     st.title("🔔 Mis Alertas y Ofertas")
     try:
@@ -72,7 +72,6 @@ if choice == "🔍 Alertas y Ofertas":
     productos_interes = st.multiselect("⭐ Filtrar por lo que necesitas comprar hoy:", lista_productos)
 
     try:
-        # Traemos explícitamente los campos de texto de supermercado y sucursal
         res = supabase.table("ofertas").select("id_oferta, precio_oferta, fecha_fin, id_producto, productos(nombre, marca, url_imagen, tamano, unidad), supermercados(nombre_supermercado), sucursales(nombre_sucursal)").execute()
     except: res = None
 
@@ -91,83 +90,67 @@ if choice == "🔍 Alertas y Ofertas":
                 grp = grupo.sort_values(by='precio_oferta')
                 with st.container(border=True):
                     c_img, c_info = st.columns(2)
-                    with c_img: st.image(grp['productos.url_imagen'].iloc[0] or URL_FOTO_DEFECTO, use_container_width=True)
+                    with c_img: st.image(grp['productos.url_imagen'].iloc[0] or URL_FOTO_DEFECTO, width=180)
                     with c_info:
                         st.subheader(f"{grp['productos.nombre'].iloc[0]} - {grp['productos.marca'].iloc[0]} ({grp['productos.tamano'].iloc[0]} {grp['productos.unidad'].iloc[0]})")
-                        st.write("🛒 **Precios y Ubicaciones Disponibles:**")
+                        st.write("🛒 **Precios y ubicaciones detectadas:**")
                         cols_t = st.columns(len(grp))
                         for i, (_, f) in enumerate(grp.iterrows()):
                             dias = (f['fecha_dt'].date() - date.today()).days
                             es_b = (i == 0)
                             with cols_t[i]:
-                                st.markdown(f'<div style="border: 2px solid {"#2bc443" if es_b else "#ccc"}; border-radius: 8px; padding: 10px; text-align: center; background-color: {"#f0fff4" if es_b else "#fff"}; margin-bottom:10px;"><b>{"🏆 MEJOR PRECIO" if es_b else "Oferta"}</b><h4 style="margin:5px 0;">{f["supermercados.nombre_supermercado"]}</h4><p style="font-size:0.8em; color:gray; margin:0;">{f["sucursales.nombre_sucursal"]}</p></div>', unsafe_allow_html=True)
+                                st.markdown(f'<div style="border: 2px solid {"#2bc443" if es_b else "#ccc"}; border-radius: 8px; padding: 10px; text-align: center; background-color: {"#f0fff4" if es_b else "#fff"};"><b>{"🏆 MEJOR PRECIO" if es_b else "Oferta"}</b><h4>{f["supermercados.nombre_supermercado"]}</h4><p style="font-size:0.8em; color:gray;">{f["sucursales.nombre_sucursal"]}</p></div>', unsafe_allow_html=True)
                                 st.metric(label="Precio", value=f"\${f['precio_oferta']:.2f}")
-                                if 0 <= dias <= 2: st.error(f"🚨 Vence en {dias} día(s)")
+                                if 0 <= dias <= 2: st.error(f"🚨 ¡CORRE! Vence en {dias} día(s)")
                                 elif dias < 0: st.warning("⚠️ Caducó")
                                 else: st.caption(f"⏳ Vence: {f['fecha_dt'].date().strftime('%d/%m/%Y')}")
         else: st.warning("No hay ofertas para los productos seleccionados.")
     else: st.info("Aún no has registrado ninguna oferta.")
 
-# --- SECCIÓN 2: REPORTES DE MERCADO (BUSCADOR AVANZADO SIN GRÁFICOS) ---
-elif choice == "📊 Reportes de Mercado":
+# --- SECCIÓN 2: REPORTES ANALÍTICOS (SOLO BUSCADORES, SIN GRÁFICOS) ---
+elif choice == "📊 Reportes Analíticos":
     st.title("📊 Buscador Estratégico de Ofertas")
     try:
-        res = supabase.table("ofertas").select("precio_oferta, fecha_inicio, fecha_fin, productos(nombre, marca, tamano, unit:unidad, id_cat), supermercados(nombre_supermercado), sucursales(nombre_sucursal, ciudad)").execute()
+        res = supabase.table("ofertas").select("precio_oferta, fecha_fin, productos(nombre, marca, id_cat), supermercados(nombre_supermercado), sucursales(nombre_sucursal)").execute()
         df = pd.json_normalize(res.data) if res.data else pd.DataFrame()
     except: df = pd.DataFrame()
 
     if not df.empty:
         df['productos.categoria'] = df['productos.id_cat'].map(c_inv).fillna("Sin Categoría")
-        
-        rep = st.sidebar.radio("Buscar ofertas por:", ["Ofertas por Producto", "Ofertas por Marca", "Ofertas por Supermercado", "Ofertas por Categoría"])
-        
-        # Formateo de columnas para mostrar la tabla limpia
-        df_vista = df.rename(columns={
-            'productos.nombre': 'Producto', 'productos.marca': 'Marca', 'productos.tamano': 'Tamaño',
-            'productos.unit': 'Unidad', 'precio_oferta': 'Precio Oferta', 'fecha_inicio': 'Inicio',
-            'fecha_fin': 'Fin', 'supermercados.nombre_supermercado': 'Supermercado',
-            'sucursales.nombre_sucursal': 'Sucursal', 'sucursales.ciudad': 'Ciudad', 'productos.categoria': 'Categoría'
-        })
-        columnas_finales = ['Producto', 'Marca', 'Tamaño', 'Unidad', 'Precio Oferta', 'Supermercado', 'Sucursal', 'Ciudad', 'Inicio', 'Fin', 'Categoría']
-        
-        if rep == "Ofertas por Producto":
-            st.subheader("🔍 Buscar por Nombre de Producto")
-            txt_p = st.text_input("Escribe el nombre del producto (ej: Arroz, Leche):")
-            if txt_p:
-                df_filtrado = df_vista[df_vista['Producto'].str.contains(txt_p, case=False)]
-                st.dataframe(df_filtrado[columnas_finales], use_container_width=True)
-            else: st.dataframe(df_vista[columnas_finales], use_container_width=True)
-            
-        elif rep == "Ofertas por Marca":
-            st.subheader("🏷️ Buscar por Marca")
-            txt_m = st.text_input("Escribe la marca del producto:")
-            if txt_m:
-                df_filtrado = df_vista[df_vista['Marca'].str.contains(txt_m, case=False)]
-                st.dataframe(df_filtrado[columnas_finales], use_container_width=True)
-            else: st.dataframe(df_vista[columnas_finales], use_container_width=True)
-            
-        elif rep == "Ofertas por Supermercado":
-            st.subheader("🏢 Buscar por Supermercado")
-            txt_s = st.text_input("Escribe el nombre del supermercado:")
-            if txt_s:
-                df_filtrado = df_vista[df_vista['Supermercado'].str.contains(txt_s, case=False)]
-                st.dataframe(df_filtrado[columnas_finales], use_container_width=True)
-            else: st.dataframe(df_vista[columnas_finales], use_container_width=True)
-            
-        elif rep == "Ofertas por Categoría":
-            st.subheader("📁 Buscar por Categoría")
-            txt_c = st.text_input("Escribe la categoría:")
-            if txt_c:
-                df_filtrado = df_vista[df_vista['Categoría'].str.contains(txt_c, case=False)]
-                st.dataframe(df_filtrado[columnas_finales], use_container_width=True)
-            else: st.dataframe(df_vista[columnas_finales], use_container_width=True)
-    else: st.info("No hay datos de ofertas disponibles para realizar búsquedas.")
+        cols_criticas = {'productos.nombre': 'Desconocido', 'productos.marca': '', 'supermercados.nombre_supermercado': 'Supermercado', 'sucursales.nombre_sucursal': 'Todas las sucursales'}
+        for col, def_val in cols_criticas.items():
+            df[col] = df[col].fillna(def_val) if col in df.columns else def_val
+
+        rep = st.sidebar.radio("Buscar ofertas por:", ["Por Producto", "Por Marca", "Por Supermercado", "Por Categoría"])
+        columnas_finales = ['productos.nombre', 'productos.marca', 'supermercados.nombre_supermercado', 'sucursales.nombre_sucursal', 'precio_oferta', 'fecha_fin']
+        df_vista = df.rename(columns={'productos.nombre':'Producto', 'productos.marca':'Marca', 'supermercados.nombre_supermercado':'Supermercado', 'sucursales.nombre_sucursal':'Sucursal', 'precio_oferta':'Precio Oferta', 'fecha_fin':'Vence', 'productos.categoria':'Categoría'})
+
+        if rep == "Por Producto":
+            st.subheader("🔎 Buscar por Nombre del Producto")
+            txt = st.text_input("Escribe el nombre del producto (ej: Leche):")
+            if txt: df_vista = df_vista[df_vista['Producto'].str.contains(txt, case=False)]
+            st.dataframe(df_vista[['Producto', 'Marca', 'Supermercado', 'Sucursal', 'Precio Oferta', 'Vence']], use_container_width=True)
+        elif rep == "Por Marca":
+            st.subheader("🔎 Buscar por Marca Fabricante")
+            txt = st.text_input("Escribe la marca comercial:")
+            if txt: df_vista = df_vista[df_vista['Marca'].str.contains(txt, case=False)]
+            st.dataframe(df_vista[['Marca', 'Producto', 'Supermercado', 'Sucursal', 'Precio Oferta', 'Vence']], use_container_width=True)
+        elif rep == "Por Supermercado":
+            st.subheader("🔎 Buscar por Cadena Comercial")
+            txt = st.text_input("Escribe el nombre de la cadena:")
+            if txt: df_vista = df_vista[df_vista['Supermercado'].str.contains(txt, case=False)]
+            st.dataframe(df_vista[['Supermercado', 'Sucursal', 'Producto', 'Marca', 'Precio Oferta', 'Vence']], use_container_width=True)
+        elif rep == "Por Categoría":
+            st.subheader("🔎 Buscar por Clasificación de Categoría")
+            txt = st.text_input("Escribe la categoría principal:")
+            if txt: df_vista = df_vista[df_vista['Categoría'].str.contains(txt, case=False)]
+            st.dataframe(df_vista[['Categoría', 'Producto', 'Marca', 'Supermercado', 'Sucursal', 'Precio Oferta', 'Vence']], use_container_width=True)
+    else: st.info("No hay datos históricos u ofertas para estructurar búsquedas.")
 
 # --- SECCIÓN 3: GESTIÓN DE PRODUCTOS ---
 elif choice == "📦 Gestión de Productos":
     st.title("📦 Administración del Catálogo de Productos")
     t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar/Borrar"])
-    
     try:
         res_p = supabase.table("productos").select("*").order("nombre").execute()
         df_p = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
@@ -202,8 +185,7 @@ elif choice == "📦 Gestión de Productos":
         if st.button("🚀 Guardar Nuevo Producto", type="primary"):
             if n_nom:
                 err, clon = validar_producto_existente(n_nom, n_mar, n_bar, n_tam, n_uni)
-                if err and not forzar:
-                    st.error(f"🚨 DUPLICADO DETECTADO: Coincide con {clon['nombre']} ({clon['marca']})")
+                if err and not forzar: st.error(f"🚨 DUPLICADO: Coincide con {clon['nombre']}")
                 else:
                     u_img = subir_a_storage(n_fot)
                     v_cat = c_dict[cat_s] if cat_s != "--- Seleccionar ---" else None
@@ -211,10 +193,8 @@ elif choice == "📦 Gestión de Productos":
                     if sub_s != "--- Seleccionar ---" and v_cat:
                         r_b = supabase.table("subcategorias").select("id_subcat").eq("nombre", sub_s).eq("id_cat", v_cat).execute()
                         if r_b.data: v_sub = r_b.data[0]['id_subcat']
-                    
                     supabase.table("productos").insert({"nombre": n_nom, "marca": n_mar, "codigo_barras": n_bar if n_bar else None, "tamano": n_tam, "unidad": n_uni, "url_imagen": u_img, "id_cat": v_cat, "id_subcat": v_sub}).execute()
                     st.success("¡Guardado!"); st.rerun()
-            else: st.warning("El nombre es obligatorio.")
 
     with t3:
         if not df_p.empty:
@@ -222,7 +202,6 @@ elif choice == "📦 Gestión de Productos":
             sel_e = st.selectbox("Selecciona un producto existente:", list(p_dict.keys()))
             p_e = p_dict[sel_e]
             
-            st.write("---")
             ec1, ec2 = st.columns(2)
             en = ec1.text_input("Modificar Nombre", p_e['nombre'])
             em = ec2.text_input("Modificar Marca", p_e['marca'])
@@ -257,19 +236,16 @@ elif choice == "📦 Gestión de Productos":
                     if esub != "--- Seleccionar ---" and v_c:
                         r_be = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
                         if r_be.data: v_s = r_be.data[0]['id_subcat']
-                        
                     supabase.table("productos").update({"nombre": en, "marca": em, "codigo_barras": eb if eb else None, "tamano": et, "unidad": eu, "url_imagen": n_url, "id_cat": v_c, "id_subcat": v_s}).eq("id_producto", p_e['id_producto']).execute()
                     st.success("¡Cambios guardados!"); st.rerun()
-                    
             if b_del.button("🗑️ Eliminar Producto Definitivamente"):
                 supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
                 st.warning("Producto borrado."); st.rerun()
 
-# --- SECCIÓN 4: ESTRUCTURA (CAT/SUBCAT HOMOLOGADA) ---
+# --- SECCIÓN 4: ESTRUCTURA (CAT/SUBCAT COMPLETAMENTE FORMATUADA) ---
 elif choice == "📁 Estructura (Cat/Subcat)":
     st.title("📁 Administración de Clasificación Jerárquica")
     t1, t2 = st.tabs(["📁 Categorías Principales", "🌿 Subcategorías (Hijos)"])
-    
     try:
         res_c = supabase.table("categorias").select("*").order("id_cat").execute()
         df_c = pd.DataFrame(res_c.data) if res_c.data else pd.DataFrame()
@@ -278,6 +254,7 @@ elif choice == "📁 Estructura (Cat/Subcat)":
     except: df_c, df_sc = pd.DataFrame(), pd.DataFrame()
 
     with t1:
+        st.subheader("Módulo de Categorías")
         tc1, tc2, tc3 = st.tabs(["📋 Ver Categorías", "➕ Nueva Categoría", "✏️ Editar/Borrar"])
         with tc1:
             if not df_c.empty: st.dataframe(df_c[['id_cat', 'nombre']], use_container_width=True)
@@ -303,6 +280,7 @@ elif choice == "📁 Estructura (Cat/Subcat)":
                     st.warning("Borrada."); st.rerun()
 
     with t2:
+        st.subheader("Módulo de Subcategorías")
         tsc1, tsc2, tsc3 = st.tabs(["📋 Ver Subcategorías", "➕ Nueva Subcategoría", "✏️ Editar/Borrar"])
         with tsc1:
             if not df_sc.empty:
@@ -320,18 +298,25 @@ elif choice == "📁 Estructura (Cat/Subcat)":
             else: st.warning("Crea una categoría primero.")
         with tsc3:
             if not df_sc.empty:
+                # Corregido: Mapeo de subcategorías vinculando el ID único para que se pueda modificar sin errores
                 sc_map = {f"{r['categorias.nombre']} -> {r['nombre']}": r for _, r in df_sc.iterrows()}
-                s_sc = st.selectbox("Selecciona Subcategoría:", list(sc_map.keys()), key="s_sc_e")
+                s_sc = st.selectbox("Selecciona Subcategoría a Modificar/Eliminar:", list(sc_map.keys()), key="s_sc_e")
                 sc_d = sc_map[s_sc]
-                un_sc = st.text_input("Modificar Nombre de Subcategoría", value=sc_d['nombre'], key="u_sc_n")
+                
+                un_sc = st.text_input("Nombre de la Subcategoría", sc_d['nombre'], key="u_sc_n")
+                c_padre_edit = st.selectbox("Cambiar Categoría Padre:", lista_cat, index=lista_cat.index(sc_d['categorias.nombre']))
+                
                 bsc1, bsc2 = st.columns(2)
-                if bsc1.button("💾 Actualizar Subcategoría"):
-                    # CORREGIDO: Guarda correctamente los cambios en Supabase usando id_subcat
-                    supabase.table("subcategorias").update({"nombre": un_sc}).eq("id_subcat", sc_d['id_subcat']).execute()
-                    st.success("Subcategoría actualizada exitosamente."); st.rerun()
+                if bsc1.button("💾 Guardar Cambios Subcategoría"):
+                    try:
+                        supabase.table("subcategorias").update({"nombre": un_sc, "id_cat": c_dict[c_padre_edit]}).eq("id_subcat", sc_d['id_subcat']).execute()
+                        st.success("Subcategoría actualizada exitosamente."); st.rerun()
+                    except Exception as e: st.error(f"Error: {e}")
                 if bsc2.button("🗑️ Eliminar Subcategoría"):
-                    supabase.table("subcategorias").delete().eq("id_subcat", sc_d['id_subcat']).execute()
-                    st.warning("Borrada."); st.rerun()
+                    try:
+                        supabase.table("subcategorias").delete().eq("id_subcat", sc_d['id_subcat']).execute()
+                        st.warning("Subcategoría eliminada."); st.rerun()
+                    except Exception as e: st.error(f"Error: {e}")
 
 # --- SECCIÓN 5: TIENDAS Y SUCURSALES ---
 elif choice == "🏪 Tiendas y Sucursales":
@@ -377,8 +362,7 @@ elif choice == "🏪 Tiendas y Sucursales":
                 if not df_suc.empty:
                     suc_map = {f"{r['supermercados.nombre_supermercado']} - {r['nombre_sucursal']}": r for _, r in df_suc.iterrows()}
                     sel_suc_edit = st.selectbox("Selecciona Sucursal:", list(suc_map.keys()))
-                    suc_data = \
-                    suc_map[sel_suc_edit]
+                    suc_data = suc_map[sel_suc_edit]
                     with st.form("suc_edit_form"):
                         esuc_name = st.text_input("Nombre", value=suc_data['nombre_sucursal'] if 'nombre_sucursal' in suc_data else "")
                         eciu = st.text_input("Ciudad", value=suc_data['ciudad'] if 'ciudad' in suc_data else "")
@@ -386,7 +370,7 @@ elif choice == "🏪 Tiendas y Sucursales":
                         if b1.form_submit_button("💾 Actualizar"): supabase.table("sucursales").update({"nombre_sucursal": esuc_name, "ciudad": eciu}).eq("id_sucursal", suc_data['id_sucursal']).execute(); st.success("Actualizado."); st.rerun()
                         if b2.form_submit_button("🗑️ Borrar"): supabase.table("sucursales").delete().eq("id_sucursal", suc_data['id_sucursal']).execute(); st.warning("Borrado."); st.rerun()
 
-# --- SECCIÓN 6: REGISTRAR OFERTAS (CON FECHA INICIO) ---
+# --- SECCIÓN 6: REGISTRAR OFERTAS (FECHA INICIO INTEGRADA) ---
 elif choice == "🏷️ Registrar Ofertas":
     st.title("🏷️ Cargar Ofertas por Catálogo")
     try: supers = supabase.table("supermercados").select("*").order("nombre_supermercado").execute()
@@ -412,9 +396,4 @@ elif choice == "🏷️ Registrar Ofertas":
             p_df = pd.DataFrame(prods.data)
             p_df['cat_nombre'] = p_df['id_cat'].map(c_inv).fillna("Sin Categoría")
             p_df['label_visual'] = "[" + p_df['cat_nombre'] + "] " + p_df['nombre'] + " (" + p_df['marca'] + ")"
-            p_dict = dict(zip(p_df['label_visual'], p_df['id_producto']))
-            lista_prods_ordenada = sorted(list(p_dict.keys()))
-            
-            with st.form("form_of"):
-                p_sel = st.selectbox("Producto en oferta", lista_prods_ordenada)
-                precio = st.number_input
+            p_dict = dict(zip(p_df['label_visual'], p_df['id_producto
