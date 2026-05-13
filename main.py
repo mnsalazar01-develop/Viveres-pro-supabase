@@ -25,8 +25,7 @@ def subir_a_storage(archivo):
                 file_options={"content-type": archivo.type}
             )
             return supabase.storage.from_("imagenes").get_public_url(nombre_archivo)
-        except Exception as e:
-            st.error(f"Error al subir imagen al servidor: {e}")
+        except:
             return None
     return None
 
@@ -35,7 +34,7 @@ st.sidebar.title("Menú Principal")
 menu = ["🔍 Alertas y Ofertas", "📦 Gestión de Productos", "🏪 Tiendas y Sucursales", "🏷️ Registrar Ofertas"]
 choice = st.sidebar.selectbox("Ir a:", menu)
 
-# --- SECCIÓN 1: ALERTAS Y OFERTAS ---
+# --- SECCIÓN 1: ALERTAS Y OFERTAS (CON COMPARADOR INTEGRADO) ---
 if choice == "🔍 Alertas y Ofertas":
     st.title("🔔 Mis Alertas y Ofertas")
     
@@ -51,7 +50,7 @@ if choice == "🔍 Alertas y Ofertas":
     # Consulta de ofertas en tiempo real
     try:
         res = supabase.table("ofertas").select("""
-            id_oferta, precio_oferta, fecha_fin,
+            id_oferta, precio_oferta, fecha_fin, id_producto,
             productos(nombre, marca, url_imagen, tamano, unidad),
             supermercados(nombre_supermercado),
             sucursales(nombre_sucursal)
@@ -68,36 +67,67 @@ if choice == "🔍 Alertas y Ofertas":
 
         if not df.empty:
             df['fecha_dt'] = pd.to_datetime(df['fecha_fin'])
-            df = df.sort_values(by='fecha_dt')
-
-            for _, o in df.iterrows():
-                fecha_v = o['fecha_dt'].date()
-                dias = (fecha_v - date.today()).days
+            
+            # AGRUPAMOS POR PRODUCTO PARA EL COMPARADOR LADO A LADO
+            for prod_id, grupo in df.groupby('id_producto'):
+                # Ordenamos las ofertas de este producto del más barato al más caro
+                grupo_ordenado = grupo.sort_values(by='precio_oferta')
                 
+                p_nombre = grupo_ordenado['productos.nombre'].iloc[0]
+                p_marca = grupo_ordenado['productos.marca'].iloc[0]
+                p_img = grupo_ordenado['productos.url_imagen'].iloc[0]
+                p_tam = grupo_ordenado['productos.tamano'].iloc[0]
+                p_uni = grupo_ordenado['productos.unidad'].iloc[0]
+                
+                # Tarjeta contenedora del producto
                 with st.container(border=True):
-                    c1, c2, c3 = st.columns()
-                    with c1:
-                        st.image(o['productos.url_imagen'] or "placeholder.com", use_container_width=True)
-                    with c2:
-                        st.subheader(f"{o['productos.nombre']} - {o['productos.marca']}")
-                        st.write(f"🏢 {o['supermercados.nombre_supermercado']}")
-                        st.caption(f"📍 {o['sucursales.nombre_sucursal'] or 'Todas las sucursales'}")
+                    c_img, c_info = st.columns([1, 3])
+                    
+                    with c_img:
+                        st.image(p_img or "placeholder.com", use_container_width=True)
+                    
+                    with c_info:
+                        st.subheader(f"{p_nombre} - {p_marca} ({p_tam} {p_uni})")
+                        st.write("🛒 **Opciones disponibles en el mercado:**")
                         
-                        if 0 <= dias <= 2:
-                            st.error(f"🚨 ¡QUEDA POCO TIEMPO! Vence en {dias} día(s) ({fecha_v.strftime('%d/%m/%Y')})")
-                        elif dias < 0:
-                            st.warning("⚠️ Esta oferta ya caducó")
-                        else:
-                            st.info(f"⏳ Disponible hasta: {fecha_v.strftime('%d/%m/%Y')}")
-                    with c3:
-                        st.write("Precio Oferta:")
-                        st.header(f"${o['precio_oferta']}")
+                        # Creamos columnas dinámicas para poner los supermercados lado a lado
+                        num_ofertas = len(grupo_ordenado)
+                        columnas_tiendas = st.columns(num_ofertas)
+                        
+                        for i, (_, fila) in enumerate(grupo_ordenado.iterrows()):
+                            fecha_v = fila['fecha_dt'].date()
+                            dias = (fecha_v - date.today()).days
+                            
+                            # El primero de la lista (i == 0) siempre será el más barato gracias al sort_values
+                            es_el_mas_barato = (i == 0)
+                            borde_color = "#2bc443" if es_el_mas_barato else "#cccccc"
+                            badge_ganador = "🏆 MEJOR PRECIO" if es_el_mas_barato else "Oferta"
+                            
+                            with columnas_tiendas[i]:
+                                # Cuadro visual para cada supermercado
+                                st.markdown(f"""
+                                    <div style="border: 2px solid {borde_color}; border-radius: 8px; padding: 10px; text-align: center; background-color: {'#f0fff4' if es_el_mas_barato else '#ffffff'};">
+                                        <b style="color: {'#2bc443' if es_el_mas_barato else '#555555'}; font-size: 0.85em;">{badge_ganador}</b>
+                                        <h4 style="margin: 5px 0 0 0; color: #333333;">{fila['supermercados.nombre_supermercado']}</h4>
+                                        <p style="margin: 0; font-size: 0.75em; color: gray;">{fila['sucursales.nombre_sucursal'] or 'Todas las sucursales'}</p>
+                                    </div>
+                                """, unsafe_allow_html=True)
+                                
+                                # Mostramos el precio y el semáforo de urgencia debajo del cuadro
+                                st.metric(label="Precio", value=f"${fila['precio_oferta']}")
+                                
+                                if 0 <= dias <= 2:
+                                    st.error(f"🚨 ¡CORRE! Vence en {dias} día(s)")
+                                elif dias < 0:
+                                    st.warning("⚠️ Caducó")
+                                else:
+                                    st.caption(f"⏳ Vence: {fecha_v.strftime('%d/%m/%Y')}")
         else:
             st.warning("No hay ofertas para los productos seleccionados.")
     else:
         st.info("Aún no has registrado ninguna oferta.")
 
-# --- SECCIÓN 2: GESTIÓN DE PRODUCTOS (CRUD COMPLETO) ---
+# --- SECCIÓN 2: GESTIÓN DE PRODUCTOS ---
 elif choice == "📦 Gestión de Productos":
     st.title("📦 Administración de Productos")
     t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar/Borrar"])
@@ -167,7 +197,7 @@ elif choice == "📦 Gestión de Productos":
                         supabase.table("productos").delete().eq("id_producto", p['id_producto']).execute()
                         st.warning("Producto eliminado de la base de datos."); st.rerun()
                     except Exception as e:
-                        st.error(f"No se pudo eliminar. Revisa si tiene ofertas vinculadas: {e}")
+                        st.error(f"No se pudo eliminar: {e}")
 
 # --- SECCIÓN 3: TIENDAS Y SUCURSALES ---
 elif choice == "🏪 Tiendas y Sucursales":
@@ -247,7 +277,8 @@ elif choice == "🏷️ Registrar Ofertas":
                     try:
                         supabase.table("ofertas").insert({
                             "id_producto": p_dict[p_sel], "id_super": super_dict[super_sel],
-                            "id_sucursal": suc_dict[suc_sel], "precio_oferta": precio, "fecha_fin": str(vence)
+                            "id_sucursal": {suc_dict[suc_sel]} if suc_dict[suc_sel] is not None else None,
+                            "precio_oferta": precio, "fecha_fin": str(vence)
                         }).execute()
                         st.success("¡Oferta publicada exitosamente!"); st.balloons()
                     except Exception as e:
