@@ -29,16 +29,56 @@ def subir_a_storage(archivo):
             return None
     return None
 
+# --- FUNCIÓN DE VALIDACIÓN ROBUSTA ANTI-DUPLICADOS ---
+def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
+    """
+    Busca coincidencias estrictas por código de barras o similitud por combinación
+    de Nombre + Marca + Tamaño + Unidad (ignorando mayúsculas y espacios).
+    """
+    # 1. Validación por Código de Barras (Capa Dura)
+    if barras:
+        query_barras = supabase.table("productos").select("*").eq("codigo_barras", barras)
+        if id_excluir:
+            query_barras = query_barras.neq("id_producto", id_excluir)
+        res_barras = query_barras.execute()
+        if res_barras.data:
+            return "barras", res_barras.data[0]
+
+    # 2. Validación por Combinación de Atributos (Capa Inteligente)
+    # Traemos los productos existentes para comparar en memoria de forma limpia
+    query_textos = supabase.table("productos").select("*")
+    if id_excluir:
+        query_textos = query_textos.neq("id_producto", id_excluir)
+    res_textos = query_textos.execute()
+    
+    if res_textos.data:
+        # Normalizamos la entrada del usuario
+        nom_norm = "".join(nombre.lower().split())
+        mar_norm = "".join(marca.lower().split()) if marca else ""
+        tam_norm = float(tamano)
+        uni_norm = unidad.lower()
+
+        for p in res_textos.data:
+            p_nom = "".join(p['nombre'].lower().split())
+            p_mar = "".join(p['marca'].lower().split()) if p['marca'] else ""
+            p_tam = float(p['tamano']) if p['tamano'] else 0.0
+            p_uni = p['unidad'].lower() if p['unidad'] else ""
+
+            # Si coinciden los 4 atributos esenciales, es un duplicado semántico
+            if nom_norm == p_nom and mar_norm == p_mar and tam_norm == p_tam and p_uni == uni_norm:
+                return "atributos", p
+
+    return None, None
+
 # 2. MENÚ LATERAL DE NAVEGACIÓN
 st.sidebar.title("Menú Principal")
 menu = ["🔍 Alertas y Ofertas", "📦 Gestión de Productos", "🏪 Tiendas y Sucursales", "🏷️ Registrar Ofertas"]
 choice = st.sidebar.selectbox("Ir a:", menu)
 
-# --- SECCIÓN 1: ALERTAS Y OFERTAS (COMPLETAMENTE BLINDADA) ---
+# --- SECCIÓN 1: ALERTAS Y OFERTAS ---
 if choice == "🔍 Alertas y Ofertas":
     st.title("🔔 Mis Alertas y Ofertas")
     
-    # Buscador de productos para filtrar por necesidad
     try:
         res_p = supabase.table("productos").select("nombre").execute()
         lista_productos = sorted(list(set([p['nombre'] for p in res_p.data]))) if res_p.data else []
@@ -47,7 +87,6 @@ if choice == "🔍 Alertas y Ofertas":
         
     productos_interes = st.multiselect("⭐ Filtrar por lo que necesitas comprar hoy:", lista_productos)
 
-    # Consulta unificada en tiempo real
     try:
         res = supabase.table("ofertas").select("""
             id_oferta, precio_oferta, fecha_fin, id_producto,
@@ -60,18 +99,12 @@ if choice == "🔍 Alertas y Ofertas":
         res = None
 
     if res and res.data:
-        # Normalizamos de forma segura manejando nulos
         df = pd.json_normalize(res.data)
         
-        # Aseguramos la existencia de las columnas críticas para evitar KeyError
         columnas_criticas = {
-            'productos.nombre': 'Producto Desconocido',
-            'productos.marca': '',
-            'productos.url_imagen': '',
-            'productos.tamano': 0,
-            'productos.unidad': 'ud',
-            'supermercados.nombre_supermercado': 'Supermercado',
-            'sucursales.nombre_sucursal': 'Todas las sucursales'
+            'productos.nombre': 'Producto Desconocido', 'productos.marca': '',
+            'productos.url_imagen': '', 'productos.tamano': 0, 'productos.unidad': 'ud',
+            'supermercados.nombre_supermercado': 'Supermercado', 'sucursales.nombre_sucursal': 'Todas las sucursales'
         }
         for col, defecto in columnas_criticas.items():
             if col not in df.columns:
@@ -85,7 +118,6 @@ if choice == "🔍 Alertas y Ofertas":
         if not df.empty:
             df['fecha_dt'] = pd.to_datetime(df['fecha_fin'])
             
-            # AGRUPAMOS POR PRODUCTO PARA COMPARADOR LADO A LADO
             for prod_id, grupo in df.groupby('id_producto'):
                 grupo_ordenado = grupo.sort_values(by='precio_oferta')
                 
@@ -139,7 +171,7 @@ if choice == "🔍 Alertas y Ofertas":
     else:
         st.info("Aún no has registrado ninguna oferta.")
 
-# --- SECCIÓN 2: GESTIÓN DE PRODUCTOS ---
+# --- SECCIÓN 2: GESTIÓN DE PRODUCTOS (VALIDACIÓN ROBUSTA) ---
 elif choice == "📦 Gestión de Productos":
     st.title("📦 Administración de Productos")
     t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar/Borrar"])
@@ -157,57 +189,79 @@ elif choice == "📦 Gestión de Productos":
             st.info("El catálogo está vacío.")
             
     with t2:
-        with st.form("nuevo_p", clear_on_submit=True):
+        with st.form("nuevo_p", clear_on_submit=False):
             col1, col2 = st.columns(2)
             nombre = col1.text_input("Nombre*")
             marca = col2.text_input("Marca")
-            barras = col1.text_input("Código de Barras")
-            tam = col2.number_input("Tamaño", min_value=0.0)
+            barras = col1.text_input("Código de Barras (EAN / UPC)").strip()
+            tam = col2.number_input("Tamaño/Peso", min_value=0.0, step=0.1)
             uni = col1.selectbox("Unidad", ["gr", "kg", "ml", "lt", "unidad"])
             foto = col2.file_uploader("Foto (WebP, JPG, PNG)", type=['jpg', 'png', 'jpeg', 'webp'])
             
-            if st.form_submit_button("Guardar Producto"):
+            # Casilla de emergencia para omitir advertencias si el usuario insiste
+            forzar_guardado = st.checkbox("⚠️ Forzar el registro (Usar solo si estás seguro de que no es un duplicado)")
+
+            if st.form_submit_button("🚀 Guardar Producto"):
                 if nombre:
-                    url_img = subir_a_storage(foto)
-                    try:
-                        supabase.table("productos").insert({
-                            "nombre": nombre, "marca": marca, "codigo_barras": barras, 
-                            "tamano": tam, "unidad": uni, "url_imagen": url_img
-                        }).execute()
-                        st.success("¡Producto guardado exitosamente!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error de base de datos al guardar: {e}")
+                    tipo_error, clon = validar_producto_existente(nombre, marca, barras, tam, uni)
+                    
+                    if tipo_error and not forzar_guardado:
+                        if tipo_error == "barras":
+                            st.error(f"🚨 BLOQUEO CRÍTICO: El código de barras **{barras}** ya está registrado.")
+                        else:
+                            st.warning(f"⚠️ DETECCIÓN DE SIMILITUD: Ya existe un producto con características idénticas.")
+                        
+                        st.info(f"📦 **Producto en Base de Datos:** {clon['nombre']} ({clon['marca']}) - {clon['tamano']} {clon['unidad']} | Código: {clon['codigo_barras'] or 'Ninguno'}")
+                    else:
+                        url_img = subir_a_storage(foto)
+                        try:
+                            supabase.table("productos").insert({
+                                "nombre": nombre, "marca": marca, "codigo_barras": barras if barras else None, 
+                                "tamano": tam, "unidad": uni, "url_imagen": url_img
+                            }).execute()
+                            st.success("¡Producto guardado exitosamente!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al guardar: {e}")
+                else:
+                    st.warning("El campo 'Nombre' es obligatorio.")
 
     with t3:
         if not df_p.empty:
-            prod_dict = {f"{p['nombre']} - {p['marca']}": p for p in res_p.data}
+            prod_dict = {f"{p['nombre']} - {p['marca']} ({p['tamano']}{p['unidad']})": p for p in res_p.data}
             sel = st.selectbox("Selecciona producto para modificar:", list(prod_dict.keys()))
             p = prod_dict[sel]
             
             with st.form("edit_p"):
                 en = st.text_input("Nombre", p['nombre'])
                 em = st.text_input("Marca", p['marca'])
-                eb = st.text_input("Código de Barras", p['codigo_barras'] or "")
+                eb = st.text_input("Código de Barras", p['codigo_barras'] or "").strip()
                 et = st.number_input("Tamaño", value=float(p['tamano']) if p['tamano'] else 0.0)
                 eu = st.selectbox("Unidad", ["gr", "kg", "ml", "lt", "unidad"], index=["gr", "kg", "ml", "lt", "unidad"].index(p['unidad']) if p['unidad'] in ["gr", "kg", "ml", "lt", "unidad"] else 0)
-                ef = st.file_uploader("Cambiar Foto (dejar vacío para mantener)", type=['jpg', 'png', 'jpeg', 'webp'])
+                ef = st.file_uploader("Cambiar Foto", type=['jpg', 'png', 'jpeg', 'webp'])
                 
+                forzar_edit = st.checkbox("⚠️ Forzar cambios")
                 c_del, c_upd = st.columns(2)
+                
                 if c_upd.form_submit_button("💾 Guardar Cambios"):
-                    nueva_url = subir_a_storage(ef) if ef else p['url_imagen']
-                    try:
-                        supabase.table("productos").update({
-                            "nombre": en, "marca": em, "codigo_barras": eb, "tamano": et, "unidad": eu, "url_imagen": nueva_url
-                        }).eq("id_producto", p['id_producto']).execute()
-                        st.success("Cambios aplicados."); st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al actualizar: {e}")
+                    tipo_error, clon = validar_producto_existente(en, em, eb, et, eu, id_excluir=p['id_producto'])
+                    
+                    if tipo_error and not forzar_edit:
+                        st.error(f"🚨 OPERACIÓN RECHAZADA: Estos cambios generan un conflicto de duplicidad con el producto: {clon['nombre']} ({clon['marca']})")
+                    else:
+                        nueva_url = subir_a_storage(ef) if ef else p['url_imagen']
+                        try:
+                            supabase.table("productos").update({
+                                "nombre": en, "marca": em, "codigo_barras": eb if eb else None, "tamano": et, "unidad": eu, "url_imagen": nueva_url
+                            }).eq("id_producto", p['id_producto']).execute()
+                            st.success("Cambios aplicados."); st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al actualizar: {e}")
                         
                 if c_del.form_submit_button("🗑️ Eliminar Producto"):
                     try:
                         supabase.table("productos").delete().eq("id_producto", p['id_producto']).execute()
-                        st.warning("Producto eliminado de la base de datos."); st.rerun()
+                        st.warning("Producto eliminado."); st.rerun()
                     except Exception as e:
                         st.error(f"No se pudo eliminar: {e}")
 
@@ -215,7 +269,7 @@ elif choice == "📦 Gestión de Productos":
 elif choice == "🏪 Tiendas y Sucursales":
     st.title("🏪 Registro de Tiendas y Establecimientos")
     with st.form("super"):
-        nom = st.text_input("Nombre de la Cadena de Supermercado (Ej: Walmart)")
+        nom = st.text_input("Nombre de la Cadena de Supermercado")
         if st.form_submit_button("Guardar Cadena"):
             if nom:
                 try:
@@ -236,7 +290,7 @@ elif choice == "🏪 Tiendas y Sucursales":
         
         with st.form("suc"):
             s_sel = st.selectbox("Selecciona a qué cadena pertenece:", list(super_dict.keys()))
-            n_suc = st.text_input("Nombre de la Sucursal (Ej: Norte, Centro)")
+            n_suc = st.text_input("Nombre de la Sucursal")
             ciu = st.text_input("Ciudad")
             if st.form_submit_button("Guardar Sucursal"):
                 if n_suc and ciu:
@@ -287,7 +341,6 @@ elif choice == "🏷️ Registrar Ofertas":
                 
                 if st.form_submit_button("Publicar Oferta"):
                     try:
-                        # Corregido: Insert directo del id_sucursal sin llaves extras
                         supabase.table("ofertas").insert({
                             "id_producto": p_dict[p_sel], 
                             "id_super": super_dict[super_sel],
