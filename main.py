@@ -14,6 +14,9 @@ def init_connection():
 
 supabase = init_connection()
 
+# --- ICONO POR DEFECTO PARA PRODUCTOS SIN FOTO ---
+URL_FOTO_DEFECTO = "flaticon.com"
+
 # --- FUNCIÓN PARA SUBIR IMÁGENES ---
 def subir_a_storage(archivo):
     if archivo:
@@ -112,17 +115,17 @@ if choice == "🔍 Alertas y Ofertas":
             for prod_id, grupo in df.groupby('id_producto'):
                 grupo_ordenado = grupo.sort_values(by='precio_oferta')
                 
-                p_nombre = grupo_ordenado['productos.nombre'].iloc
-                p_marca = grupo_ordenado['productos.marca'].iloc
-                p_img = grupo_ordenado['productos.url_imagen'].iloc
-                p_tam = grupo_ordenado['productos.tamano'].iloc
-                p_uni = grupo_ordenado['productos.unidad'].iloc
+                p_nombre = grupo_ordenado['productos.nombre'].iloc[0]
+                p_marca = grupo_ordenado['productos.marca'].iloc[0]
+                p_img = grupo_ordenado['productos.url_imagen'].iloc[0]
+                p_tam = grupo_ordenado['productos.tamano'].iloc[0]
+                p_uni = grupo_ordenado['productos.unidad'].iloc[0]
                 
                 with st.container(border=True):
                     c_img, c_info = st.columns(2)
                     
                     with c_img:
-                        st.image(p_img or "placeholder.com", use_container_width=True)
+                        st.image(p_img if p_img else URL_FOTO_DEFECTO, use_container_width=True)
                     
                     with c_info:
                         st.subheader(f"{p_nombre} - {p_marca} ({p_tam} {p_uni})")
@@ -413,7 +416,7 @@ elif choice == "🏪 Tiendas y Sucursales":
                 if not df_suc.empty:
                     suc_map = {f"{r['supermercados.nombre_supermercado']} - {r['nombre_sucursal']}": r for _, r in df_suc.iterrows()}
                     sel_suc_edit = st.selectbox("Selecciona Sucursal:", list(suc_map.keys()))
-                    suc_data = ...
+                    suc_data = suc_map[sel_suc_edit]
                     with st.form("suc_edit_form"):
                         esuc_name = st.text_input("Nombre", value=suc_data['nombre_sucursal'] if 'nombre_sucursal' in suc_data else "")
                         eciu = st.text_input("Ciudad", value=suc_data['ciudad'] if 'ciudad' in suc_data else "")
@@ -465,7 +468,8 @@ elif choice == "🏷️ Registrar Ofertas":
                     try:
                         supabase.table("ofertas").insert({
                             "id_producto": p_dict[p_sel], "id_super": super_dict[super_sel],
-                            "id_sucursal": suc_dict[suc_sel], "precio_oferta": precio, "fecha_fin": str(vence)
+                            "id_sucursal": {suc_dict[suc_sel]} if suc_dict[suc_sel] is not None else None,
+                            "precio_oferta": precio, "fecha_fin": str(vence)
                         }).execute()
                         st.success("¡Oferta publicada exitosamente!"); st.balloons()
                     except Exception as e:
