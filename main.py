@@ -12,7 +12,7 @@ def init_connection():
 
 supabase = init_connection()
 
-# --- IMAGEN REAL DE RESPALDO PARA PRODUCTOS SIN FOTO ---
+# --- ENLACE DIRECTO REAL PARA PRODUCTOS SIN FOTO (CORREGIDO) ---
 URL_DEFECTO = "flaticon.com"
 
 # --- FUNCIONES DE SOPORTE MAESTRAS ---
@@ -359,6 +359,6 @@ elif choice == "🏷️ Registrar Ofertas":
                 vence = c_fecha2.date_input("Fecha de Vencimiento", format="DD/MM/YYYY")
                 if st.form_submit_button("🚀 Publicar Oferta"):
                     try:
-                        supabase.table("ofertas").insert({"id_producto": p_dict[p_sel], "id_super": super_dict[super_sel], "id_sucursal": suc_dict[suc_sel], "precio_oferta": precio, "fecha_inicio": str(inicio), "fecha_fin": str(vence)}).execute()
+                        supabase.table("ofertas").insert({"id_producto": p_dict[p_sel], "id_super": super_dict[super_sel], "id_sucursal": {suc_dict[suc_sel]} if suc_dict[suc_sel] is not None else None, "precio_oferta": precio, "fecha_inicio": str(inicio), "fecha_fin": str(vence)}).execute()
                         st.success("¡Oferta publicada!"); st.balloons()
                     except Exception as e: st.error(f"Error: {e}")
