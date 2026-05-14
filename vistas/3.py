@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES ARQUITECTURA POS DEFINTIVA ---
-VERSION_MODULO = "v12.0.0 - Entrada Única por Captura de Letras"
+# --- CONTROL DE VERSIONES ARQUITECTURA POS UNIFICADA ---
+VERSION_MODULO = "v12.1.0 - Motor POS Unificado en Primer Plano"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -92,37 +92,32 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (ARQUITECTURA DE ENTRADA ÚNICA v12.0.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (UNIFICADO EN PRIMER PLANO v12.1.0) ---
 with t2:
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE Y MARCA (CAMPOS LIBRES INMUNES A BORRADOS CON COINCIDENCIA DE LETRA) ---
+    # --- FILA 1: NOMBRE Y MARCA (UN SOLO CAMPO INTELIGENTE POR ATRIBUTO) ---
     f1_c1, f1_c2 = st.columns(2)
     
     with f1_c1:
-        # La Caja de Trabajo real: recibe tus letras directamente y el TAB la congela al 100%
-        nombre_final = st.text_input("Nombre del Producto*", key=f"w_nombre_{f_idx}", placeholder="Escribe el nombre aquí...")
+        # Control único de primer plano: autocompleta con un clic, y si es nuevo retiene el texto al dar TAB
+        nombre_final = st.selectbox(
+            "Nombre del Producto*", 
+            options=lista_nombres_existentes, 
+            index=None, 
+            placeholder="Escribe o busca el nombre aquí...", 
+            key=f"w_nombre_{f_idx}"
+        )
         
-        # LÓGICA DE ALIMENTACIÓN LETRA POR LETRA: Si el usuario escribe, el sistema busca coincidencias pasivas abajo
-        if nombre_final and lista_nombres_existentes:
-            coincidencias_n = [n for n in lista_nombres_existentes if nombre_final.lower() in n.lower()]
-            if coincidencias_n:
-                # El usuario puede usar este mini-selector opcional para autorellenar la caja con un clic si ya existe
-                s_nom_click = st.selectbox("💡 Nombres similares (Haz clic para autorellenar):", ["--- Continuar con mi texto tipeado ---"] + coincidencias_n, key=f"sug_n_{f_idx}")
-                if s_nom_click != "--- Continuar con mi texto tipeado ---":
-                    nombre_final = s_nom_click
-
     with f1_c2:
-        # La Caja de Trabajo real para la Marca
-        marca_final = st.text_input("Marca del Producto", key=f"w_marca_{f_idx}", placeholder="Escribe la marca aquí...")
-        
-        if marca_final and lista_marcas_existentes:
-            coincidencias_m = [m for m in lista_marcas_existentes if marca_final.lower() in m.lower()]
-            if coincidencias_m:
-                s_mar_click = st.selectbox("💡 Marcas similares (Haz clic para autorellenar):", ["--- Continuar con mi marca tipeada ---"] + coincidencias_m, key=f"sug_m_{f_idx}")
-                if s_mar_click != "--- Continuar con mi marca tipeada ---":
-                    marca_final = s_mar_click
+        marca_final = st.selectbox(
+            "Marca del Producto", 
+            options=lista_marcas_existentes, 
+            index=None, 
+            placeholder="Escribe o busca la marca aquí...", 
+            key=f"w_marca_{f_idx}"
+        )
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA LADO A LADO ---
     f2_c1, f2_c2 = st.columns(2)
@@ -139,7 +134,7 @@ with t2:
             subcat_opciones += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_actual]
     subcategoria_sel = f3_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key=f"n_sub_{f_idx}")
     
-    # --- FILA 4: SKU Y FOTO LADO A LADO ---
+    # --- FILA 4: SKU Y FOTO ---
     f4_c1, f4_c2 = st.columns(2)
     barras = f4_c1.text_input("Código de Barras (SKU)", key=f"n_bar_{f_idx}", value="", placeholder="Código de barras...").strip()
     foto = f4_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key=f"n_foto_{f_idx}")
