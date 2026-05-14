@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES ARQUITECTURA DEFINTIVA POS ---
-VERSION_MODULO = "v7.0.0 - Caja Única POS Libre de Borrados"
+# --- CONTROL DE VERSIONES ARQUITECTURA POS DEFINITIVA ---
+VERSION_MODULO = "v8.0.0 - Buscador Predictivo Híbrido POS"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -84,35 +84,32 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DEFINITIVO ANTI-BORRADOS v7.0.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA HÍBRIDO POS v8.0.0) ---
 with t2:
     st.subheader("Formulario de Carga")
     
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE Y MARCA (CAMPOS LIBRES COMPATIBLES CON DIGITACIÓN ULTRA RÁPIDA) ---
+    # --- FILA 1: NOMBRE Y MARCA (SISTEMA DATALIST HTML5 INMUNE A BORRADOS) ---
     f1_c1, f1_c2 = st.columns(2)
     
     with f1_c1:
-        # Cuadro de texto crudo: inmune a limpiezas o borrados por el foco del TAB
-        nombre_final = st.text_input("Nombre del Producto*", key="n_nom_libre", placeholder="Escribe el nombre del vívere...")
+        # Creamos el contenedor de sugerencias nativo del navegador para los nombres
+        html_n = "".join([f'<option value="{n}">' for n in lista_nombres_existentes])
+        st.markdown(f'<datalist id="sug_nombres">{html_n}</datalist>', unsafe_allow_html=True)
         
-        # Inteligencia predictiva pasiva: si el usuario escribe, el backend le avisa abajo si ya existe algo parecido
-        if nombre_final and lista_nombres_existentes:
-            coincidencias_n = [n for n in lista_nombres_existentes if nombre_final.lower() in n.lower()]
-            if coincidencias_n:
-                st.markdown("<p style='color: #2bc443; font-size: 0.82em; font-weight: bold; margin-bottom: 2px;'>💡 Ya registrados:</p>", unsafe_allow_html=True)
-                st.caption(", ".join(coincidencias_n[:12]))
+        # El text_input recibe el atributo 'list' vía HTML para activar el scroll predictivo sin la rigidez de Streamlit
+        nombre_final = st.text_input("Nombre del Producto*", key="n_nom_libre", placeholder="Teclea para buscar o registrar...")
+        st.markdown(f'<script>document.querySelector("input[aria-label=\'Nombre del Producto*\']").setAttribute("list", "sug_nombres");</script>', unsafe_allow_html=True)
                 
     with f1_c2:
-        marca_final = st.text_input("Marca del Producto", key="n_mar_libre", placeholder="Escribe la marca comercial...")
+        # Contenedor de sugerencias nativo para las marcas
+        html_m = "".join([f'<option value="{m}">' for m in lista_marcas_existentes])
+        st.markdown(f'<datalist id="sug_marcas">{html_m}</datalist>', unsafe_allow_html=True)
         
-        if marca_final and lista_marcas_existentes:
-            coincidencias_m = [m for m in lista_marcas_existentes if marca_final.lower() in m.lower()]
-            if coincidencias_m:
-                st.markdown("<p style='color: #2bc443; font-size: 0.82em; font-weight: bold; margin-bottom: 2px;'>💡 Marcas similares:</p>", unsafe_allow_html=True)
-                st.caption(", ".join(coincidencias_m[:12]))
+        marca_final = st.text_input("Marca del Producto", key="n_mar_libre", placeholder="Teclea para buscar o registrar...")
+        st.markdown(f'<script>document.querySelector("input[aria-label=\'Marca del Producto\']").setAttribute("list", "sug_marcas");</script>', unsafe_allow_html=True)
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
     f2_c1, f2_c2 = st.columns(2)
@@ -242,3 +239,4 @@ with t3:
                 supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
                 st.warning("Producto eliminado de la base de datos."); st.rerun()
             except Exception as e: st.error(f"No se pudo elminar: {e}")
+    else: st.info("El catálogo está vacío.")
