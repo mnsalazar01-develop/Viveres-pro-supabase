@@ -4,13 +4,13 @@ from datetime import datetime
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
-    st.error("Conexión central no encontrada. Por favor, regresa al inicio.")
+    st.error("Conexión central no encontrada. Por favor, regresa al inicio de la aplicación.")
     st.stop()
 
 supabase = st.session_state["supabase"]
 st.title("📦 Administración de Productos")
 
-# 2. CARGAR DICCIONARIOS MAESTROS DESDE SUPABASE
+# 2. CARGA SEGURO DE DICCIONARIOS MAESTROS (Con validación de nulos)
 try:
     res_p = supabase.table("productos").select("*").order("nombre").execute()
     df_p = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
@@ -21,10 +21,13 @@ try:
     lista_cat = [c['nombre'] for c in res_c.data] if res_c.data else []
 
     res_sc = supabase.table("subcategorias").select("*").order("nombre").execute()
-    subcat_inv_dict = {sc['id_subcat']: sc['nombre'] for sc in res_sc.data} if res_sc.data else {}
-except:
+    # Guardamos mapeo bidireccional estricto de subcategorías vinculadas a su categoría padre
+    subcat_dict = {f"{s['nombre']} (Cat {s['id_cat']})": s['id_subcat'] for s in res_sc.data} if res_sc.data else {}
+    subcat_inv_dict = {s['id_subcat']: s['nombre'] for s in res_sc.data} if res_sc.data else {}
+except Exception as e:
+    st.error(f"Error al cargar datos maestros desde Supabase: {e}")
     df_p = pd.DataFrame()
-    cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
+    cat_dict, cat_inv_dict, lista_cat, subcat_dict, subcat_inv_dict = {}, {}, [], {}, {}
 
 # --- FUNCIÓN PARA SUBIR IMÁGENES ---
 def subir_a_storage(archivo):
@@ -58,21 +61,23 @@ def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir
                 return "atributos", p
     return None, None
 
-# 3. ORGANIZACIÓN POR PESTAÑAS
+# 3. INTERFAZ ORGANIZADA POR PESTAÑAS
 t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar/Borrar"])
 
+# --- PESTAÑA 1: VER CATÁLOGO ---
 with t1:
     if not df_p.empty:
         df_mostrar = df_p.copy()
         if 'id_cat' in df_mostrar.columns: df_mostrar['categoria'] = df_mostrar['id_cat'].map(cat_inv_dict)
         if 'id_subcat' in df_mostrar.columns: df_mostrar['subcategoria'] = df_mostrar['id_subcat'].map(subcat_inv_dict)
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
-    else: st.info("El catálogo está vacío.")
+    else: st.info("El catálogo de productos está vacío.")
         
+# --- PESTAÑA 2: NUEVO PRODUCTO (CARGA ÁGIL Y CONTROLADA) ---
 with t2:
     st.subheader("Formulario de Carga Ágil")
     
-    # AUTOCOMPLETAR INTELIGENTE (Punto 1)
+    # Selector de autocompletar superior
     lista_autocompletar = ["➕ Registrar Producto Nuevo (Campos Vacíos)"]
     prod_mapeo = {}
     if not df_p.empty:
@@ -82,38 +87,30 @@ with t2:
             prod_mapeo[label] = p
             
     seleccion_auto = st.selectbox("🔍 ¿El producto ya existe? Búscalo aquí para autorellenar:", lista_autocompletar, key="auto_p")
-    
-    # Determinamos los valores por defecto basándonos en la selección del autocompletar
     es_nuevo = (seleccion_auto == "➕ Registrar Producto Nuevo (Campos Vacíos)")
     p_ref = prod_mapeo.get(seleccion_auto, {}) if not es_nuevo else {}
     
-    # Preparación de datos precargados
+    # Precarga controlada de campos básicos
     val_nombre = p_ref.get("nombre", "")
     val_marca = p_ref.get("marca", "")
     val_barras = p_ref.get("codigo_barras", "")
-    
-    # TAMAÑO LIMPIO (Punto 2): Si es nuevo, arranca en None (totalmente vacío)
     val_tamano = float(p_ref["tamano"]) if "tamano" in p_ref and p_ref["tamano"] is not None else None
-    
     idx_unidad = ["gr", "kg", "ml", "lt", "unidad"].index(p_ref["unidad"]) if "unidad" in p_ref and p_ref["unidad"] in ["gr", "kg", "ml", "lt", "unidad"] else 0
-    cat_actual_auto = cat_inv_dict.get(p_ref.get("id_cat"), "--- Seleccionar ---")
-    subcat_actual_auto = subcat_inv_dict.get(p_ref.get("id_subcat"), "--- Seleccionar ---")
-
-    # DISEÑO FORMULARIO DE ENTRADA CON ENFOQUE SOLICITADO
+    
+    # Renderizado secuencial solicitado
     c1, c2 = st.columns(2)
     nombre = c1.text_input("Nombre del Producto*", value=val_nombre, key="n_nom")
     marca = c2.text_input("Marca", value=val_marca, key="n_mar")
     barras = c1.text_input("Código de Barras", value=val_barras, key="n_bar").strip()
-    
-    # CONTADOR EN UNIDADES ENTERAS (Punto 3): step=1.0 e inicio en blanco (value=val_tamano)
     tam = c2.number_input("Tamaño / Peso (Sube de 1 en 1)", min_value=0.0, step=1.0, value=val_tamano, key="n_tam")
     uni = c1.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], index=idx_unidad, key="n_uni")
     foto = c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
     
-    # SELECTORES JERÁRQUICOS COLOCADOS AL FINAL DEL FORMULARIO
+    # Selectores jerárquicos colocados estrictamente al final
+    cat_actual_auto = cat_inv_dict.get(p_ref.get("id_cat"), "--- Seleccionar ---")
     l_cat_f = ["--- Seleccionar ---"] + lista_cat
     idx_c_f = l_cat_f.index(cat_actual_auto) if cat_actual_auto in l_cat_f else 0
-    categoria_sel = c1.selectbox("Categoría Principal (Orden Numérico)", l_cat_f, index=idx_c_f, key="n_cat")
+    categoria_sel = c1.selectbox("Categoría Principal", l_cat_f, index=idx_c_f, key="n_cat")
     
     subcat_opciones = ["--- Seleccionar ---"]
     if categoria_sel != "--- Seleccionar ---":
@@ -121,45 +118,63 @@ with t2:
         res_sub_filtradas = supabase.table("subcategorias").select("*").eq("id_cat", id_cat_actual).order("nombre").execute()
         if res_sub_filtradas.data: subcat_opciones += [s['nombre'] for s in res_sub_filtradas.data]
         
+    subcat_actual_auto = subcat_inv_dict.get(p_ref.get("id_subcat"), "--- Seleccionar ---")
     idx_sc_f = subcat_opciones.index(subcat_actual_auto) if subcat_actual_auto in subcat_opciones else 0
-    subcategoria_sel = c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, index=idx_sc_f, key="n_sub")
+    subcategoria_sel = c2.selectbox("Subcategoría", subcat_opciones, index=idx_sc_f, key="n_sub")
     
-    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
+    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Ignorar alertas de similitud)", key="n_forzar")
 
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         if nombre:
             tipo_error, clon = validar_producto_existente(nombre, marca, barras, tam, uni)
             if tipo_error and not forzar_guardado:
-                st.error(f"🚨 CLON DETECTADO: Los datos coinciden con el producto '{clon['nombre']}' de la marca '{clon['marca']}'. Usa la casilla de forzar si deseas guardarlo de todas formas.")
+                st.error(f"🚨 CLON DETECTADO: Coincide con '{clon['nombre']}' de la marca '{clon['marca']}'.")
             else:
                 url_img = subir_a_storage(foto) if foto else (p_ref.get("url_imagen") if not es_nuevo else None)
                 id_cat_val = cat_dict[categoria_sel] if categoria_sel != "--- Seleccionar ---" else None
+                
+                # EXTRACCIÓN MAESTRA DEL ID DE SUBCATEGORÍA (Mapeo numérico estricto)
                 id_subcat_val = None
                 if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
-                    sub_buscar = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
-                    if sub_buscar.data: id_subcat_val = sub_buscar.data['id_subcat']
+                    res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
+                    if res_id_sub.data:
+                        id_subcat_val = res_id_sub.data[0]['id_subcat']
+
+                # Estructuramos el diccionario final limpiando campos vacíos
+                paquete_datos = {
+                    "nombre": nombre,
+                    "marca": marca if marca else None,
+                    "codigo_barras": barras if barras else None,
+                    "tamano": float(tam) if tam is not None else None,
+                    "unidad": uni,
+                    "url_imagen": url_img,
+                    "id_cat": id_cat_val,
+                    "id_subcat": id_subcat_val
+                }
 
                 try:
-                    supabase.table("productos").insert({
-                        "nombre": nombre, "marca": marca, "codigo_barras": barras if barras else None, 
-                        "tamano": tam, "unidad": uni, "url_imagen": url_img, "id_cat": id_cat_val, "id_subcat": id_subcat_val
-                    }).execute()
-                    st.success("¡Producto procesado y guardado con éxito!")
+                    supabase.table("productos").insert(paquete_datos).execute()
+                    st.success("🎉 ¡Producto registrado exitosamente en la base de datos!")
                     st.rerun()
-                except Exception as e: st.error(f"Error al guardar: {e}")
+                except Exception as servidor_error:
+                    st.error("🚨 Supabase rechazó el registro debido al siguiente error de base de datos:")
+                    st.info(f"**Mensaje del Servidor:** {servidor_error}")
+                    with st.expander("Ver estructura de datos enviada"):
+                        st.json(paquete_datos)
         else: st.warning("El campo 'Nombre' es obligatorio.")
 
+# --- PESTAÑA 3: MODIFICAR / ELIMINAR (UN PRODUCTO A LA VEZ) ---
 with t3:
     if not df_p.empty:
         st.subheader("Gestión de un Producto Individual")
-        prod_dict_e = {f"{p['nombre']} - {p['marca']} ({p['tamano']}{p['unidad']})": p for p in res_p.data}
+        prod_dict_e = {f"{p['nombre']} - {p['marca'] or 'Sin Marca'} ({p['tamano'] or 0}{p['unidad'] or ''})": p for p in res_p.data}
         sel_e = st.selectbox("Selecciona el producto específico que deseas modificar o eliminar:", list(prod_dict_e.keys()), key="s_e_p")
         p_e = prod_dict_e[sel_e]
         
         st.write("---")
         ec1, ec2 = st.columns(2)
         en = ec1.text_input("Modificar Nombre", p_e['nombre'])
-        em = ec2.text_input("Modificar Marca", p_e['marca'])
+        em = ec2.text_input("Modificar Marca", p_e['marca'] or "")
         eb = ec1.text_input("Modificar Código de Barras", p_e['codigo_barras'] or "").strip()
         et = ec2.number_input("Modificar Tamaño (Paso entero)", value=float(p_e['tamano']) if p_e['tamano'] else 0.0, step=1.0)
         eu = ec1.selectbox("Modificar Unidad", ["gr", "kg", "ml", "lt", "unidad"], index=["gr", "kg", "ml", "lt", "unidad"].index(p_e['unidad']) if p_e['unidad'] in ["gr", "kg", "ml", "lt", "unidad"] else 0)
@@ -185,12 +200,15 @@ with t3:
             else:
                 n_url = subir_a_storage(ef) if ef else p_e['url_imagen']
                 v_c = cat_dict[ecat] if ecat != "--- Seleccionar ---" else None
+                
                 v_s = None
-                if esub != "--- Seleccionar ---" and v_c:
-                    r_be = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
-                    if r_be.data: v_s = r_be.data['id_subcat']
+                if esub != "--- Seleccionar ---" and v_c is not None:
+                    res_id_sub_e = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
+                    if res_id_sub_e.data:
+                        v_s = res_id_sub_e.data[0]['id_subcat']
+                        
                 try:
-                    supabase.table("productos").update({"nombre": en, "marca": em, "codigo_barras": eb if eb else None, "tamano": et, "unidad": eu, "url_imagen": n_url, "id_cat": v_c, "id_subcat": v_s}).eq("id_producto", p_e['id_producto']).execute()
+                    supabase.table("productos").update({"nombre": en, "marca": em if em else None, "codigo_barras": eb if eb else None, "tamano": et, "unidad": eu, "url_imagen": n_url, "id_cat": v_c, "id_subcat": v_s}).eq("id_producto", p_e['id_producto']).execute()
                     st.success("¡Cambios guardados!"); st.rerun()
                 except Exception as e: st.error(f"Error al actualizar: {e}")
                 
