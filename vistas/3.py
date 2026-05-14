@@ -13,7 +13,7 @@ st.title("📦 Administración de Productos")
 # 2. CARGA SEGURA DE DICCIONARIOS MAESTROS DESDE EL SERVIDOR
 try:
     res_p = supabase.table("productos").select("*").order("nombre").execute()
-    df_p = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
+    lista_productos_maestra = res_p.data if res_p.data else []
     
     res_c = supabase.table("categorias").select("*").order("id_cat").execute()
     cat_dict = {c['nombre']: c['id_cat'] for c in res_c.data} if res_c.data else {}
@@ -23,7 +23,7 @@ try:
     res_sc = supabase.table("subcategorias").select("*").order("nombre").execute()
     subcat_inv_dict = {sc['id_subcat']: sc['nombre'] for sc in res_sc.data} if res_sc.data else {}
 except:
-    df_p = pd.DataFrame()
+    lista_productos_maestra = []
     cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
 
 # --- FUNCIÓN PARA SUBIR IMÁGENES ---
@@ -44,20 +44,18 @@ def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir
         res_barras = query_barras.execute()
         if res_barras.data: return "barras", res_barras.data
 
-    query_textos = supabase.table("productos").select("*")
-    if id_excluir: query_textos = query_textos.neq("id_producto", id_excluir)
-    res_textos = query_textos.execute()
-    
-    if res_textos.data:
+    if lista_productos_maestra:
         nom_norm = "".join((nombre or "").lower().split())
         mar_norm = "".join((marca or "").lower().split())
         tam_norm = float(tamano if tamano is not None else 0)
         uni_norm = (unidad or "").lower()
-        for p in res_textos.data:
-            p_nom = "".join((p['nombre'] or "").lower().split())
-            p_mar = "".join((p['marca'] or "").lower().split())
-            p_tam = float(p['tamano'] or 0)
-            p_uni = (p['unidad'] or "").lower()
+        for p in lista_productos_maestra:
+            if id_excluir and p['id_producto'] == id_excluir:
+                continue
+            p_nom = "".join((p.get('nombre') or "").lower().split())
+            p_mar = "".join((p.get('marca') or "").lower().split())
+            p_tam = float(p.get('tamano') or 0)
+            p_uni = (p.get('unidad') or "").lower()
             if nom_norm == p_nom and mar_norm == p_mar and tam_norm == p_tam and uni_norm == p_uni:
                 return "atributos", p
     return None, None
@@ -65,23 +63,36 @@ def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir
 # 3. INTERFAZ ORGANIZADA POR PESTAÑAS HOMOLOGADAS
 t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar/Borrar"])
 
-# --- PESTAÑA 1: VER CATÁLOGO ---
+# --- PESTAÑA 1: VER CATÁLOGO SANEADA ---
 with t1:
-    if not df_p.empty:
-        df_mostrar = df_p.copy()
-        if 'id_cat' in df_mostrar.columns: df_mostrar['categoria'] = df_mostrar['id_cat'].map(cat_inv_dict)
-        if 'id_subcat' in df_mostrar.columns: df_mostrar['subcategoria'] = df_mostrar['id_subcat'].map(subcat_inv_dict)
+    if lista_productos_maestra:
+        # Reconstruimos la lista a diccionarios planos para evitar por completo el uso de Pandas .map()
+        lista_tabla_limpia = []
+        for p in lista_productos_maestra:
+            lista_tabla_limpia.append({
+                "ID": p.get("id_producto"),
+                "Nombre": p.get("nombre"),
+                "Marca": p.get("marca") or "Sin Marca",
+                "Código Barras": p.get("codigo_barras") or "N/A",
+                "Tamaño": p.get("tamano"),
+                "Unidad": p.get("unidad"),
+                "Categoría": cat_inv_dict.get(p.get("id_cat"), "Sin Categoría"),
+                "Subcategoría": subcat_inv_dict.get(p.get("id_subcat"), "Sin Subcategoría"),
+                "url_imagen": p.get("url_imagen") or ""
+            })
+        df_mostrar = pd.DataFrame(lista_tabla_limpia)
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
-    else: st.info("El catálogo de productos está vacío.")
+    else:
+        st.info("El catálogo de productos está vacío.")
         
-# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO MAESTRO EN 4 FILAS) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO EN 4 FILAS PERFECTO) ---
 with t2:
     st.subheader("Formulario de Carga")
     
-    lista_nombres_existentes = sorted(list(set([p['nombre'] for p in res_p.data if p.get('nombre')]))) if res_p.data else []
-    lista_marcas_existentes = sorted(list(set([p['marca'] for p in res_p.data if p.get('marca') and p['marca'].strip() != ""]))) if res_p.data else []
+    lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
+    lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE Y MARCA (INDEPENDIENTES CON BUSCADOR TIPO SCROLL) ---
+    # --- FILA 1: NOMBRE Y MARCA (CAMPOS INDEPENDIENTES CON BUSCADOR) ---
     f1_c1, f1_c2 = st.columns(2)
     s_nom = f1_c1.selectbox("🔍 Buscar Nombre de Producto existente:", ["--- Escribir un Nombre Nuevo ---"] + lista_nombres_existentes, key="s_nom_box")
     if s_nom == "--- Escribir un Nombre Nuevo ---":
@@ -97,7 +108,6 @@ with t2:
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
     f2_c1, f2_c2 = st.columns(2)
-    # Iniciamos en 0.0 para que el contador esté activo y habilitado desde el primer milisegundo
     tam = f2_c1.number_input("Tamaño / Peso (Sube de 1 en 1)", min_value=0.0, step=1.0, value=0.0, key="n_tam")
     uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
     
@@ -117,7 +127,6 @@ with t2:
     barras = f4_c1.text_input("Código de Barras (SKU)", key="n_bar", placeholder="Escribe o escanea el código", value="").strip()
     foto = f4_c2.file_uploader("Foto del Producto (WebP, JPG, PNG)", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
     
-    # VISOR MULTIMEDIA COMPACTO: Miniatura pequeña y discreta en pantalla
     if foto:
         f4_c2.image(foto, caption="Miniatura cargada", width=140)
 
@@ -129,8 +138,7 @@ with t2:
             tipo_error, clon = validar_producto_existente(nombre, marca, barras, tam, uni)
             
             if tipo_error and not forzar_guardado:
-                st.error(f"🚨 CLON DETECTADO EN EL BOTÓN: Ya existe un registro exacto para '{clon['nombre']}' marca '{clon['marca']}' de ({clon['tamano']} {clon['unidad']}).")
-                st.info("💡 Si estás creando una presentación diferente, asegúrate de cambiar el valor en la caja de Tamaño/Peso.")
+                st.error(f"🚨 CLON DETECTADO: Ya existe un registro exacto para '{clon['nombre']}' marca '{clon['marca']}' de ({clon['tamano']} {clon['unidad']}).")
             else:
                 url_img = subir_a_storage(foto) if foto else None
                 id_cat_val = cat_dict[categoria_sel] if categoria_sel != "--- Seleccionar ---" else None
@@ -150,19 +158,17 @@ with t2:
                     supabase.table("productos").insert(paquete_datos).execute()
                     st.success("🎉 ¡Producto registrado exitosamente en el catálogo maestro!")
                     st.rerun()
-                except Exception as servidores_err:
-                    st.error(f"🚨 Supabase rechazó el registro: {servidores_err}")
-        else: st.warning("El campo 'Nombre' es obligatorio para poder procesar la carga.")
+                except Exception as servidor_error:
+                    st.error(f"🚨 Supabase rechazó el registro: {servidor_error}")
+        else: st.warning("El campo 'Nombre' es obligatorio.")
 
-# --- PESTAÑA 3: MODIFICAR / ELIMINAR (SANEADA TOTALMENTE) ---
+# --- PESTAÑA 3: MODIFICAR / ELIMINAR SANEADA ---
 with t3:
-    if not df_p.empty:
+    if lista_productos_maestra:
         st.subheader("Gestión de un Producto Individual")
         
-        # SANEAMIENTO: Convertimos el DataFrame a registros diccionarios nativos para evitar fallas de Pandas
-        lista_records = df_p.to_dict(orient="records")
         prod_dict_e = {}
-        for r in lista_records:
+        for r in lista_productos_maestra:
             label_e = f"{r['nombre']} - {r['marca'] or 'Sin Marca'} ({r['tamano'] or 0}{r['unidad'] or ''})"
             prod_dict_e[label_e] = r
             
