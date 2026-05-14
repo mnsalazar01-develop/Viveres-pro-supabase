@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES ARQUITECTURA POS PROFESIONAL ---
-VERSION_MODULO = "v10.4.2 - Reseteo por Llave de Contador Form"
+VERSION_MODULO = "v10.5.0 - Blindaje de Similitud y Entrada Libre de Peso"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -20,7 +20,6 @@ st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 if "pos_form_counter" not in st.session_state:
     st.session_state["pos_form_counter"] = 0
 
-# Generamos un sufijo dinámico para las llaves de los widgets basándonos en el contador
 f_idx = st.session_state["pos_form_counter"]
 
 # 2. CARGA DE BASE DE DATOS MAESTRA (BACKEND LIGERO)
@@ -51,26 +50,34 @@ def subir_a_storage(archivo):
         except: return None
     return None
 
-# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS ---
+# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS (CORREGIDA v10.5.0) ---
 def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
+    # Validación por código de barras estricta
     if barras and str(barras).strip() != "":
         res_barras = supabase.table("productos").select("*").eq("codigo_barras", barras).execute()
-        if res_barras.data: return "barras", res_barras.data
+        if res_barras.data:
+            if id_excluir and res_barras.data[0].get('id_producto') == id_excluir:
+                pass
+            else:
+                return "barras", res_barras.data[0]
 
-    if lista_productos_maestra:
-        nom_norm = "".join((nombre or "").lower().split())
-        mar_norm = "".join((marca or "").lower().split())
+    # Validación combinada por atributos de texto reales
+    if lista_productos_maestra and nombre and str(nombre).strip() != "":
+        nom_norm = "".join(str(nombre).lower().split())
+        mar_norm = "".join(str(marca or "").lower().split())
         tam_norm = float(tamano if tamano is not None else 0)
-        uni_norm = (unidad or "").lower()
+        uni_norm = str(unidad or "").lower()
         
         for p in lista_productos_maestra:
             if id_excluir and p.get('id_producto') == id_excluir:
                 continue
-            p_nom = "".join((p.get('nombre') or "").lower().split())
-            p_mar = "".join((p.get('marca') or "").lower().split())
-            p_tam = float(p.get('tamano') or 0)
-            p_uni = (p.get('unidad') or "").lower()
             
+            p_nom = "".join(str(p.get('nombre') or "").lower().split())
+            p_mar = "".join(str(p.get('marca') or "").lower().split())
+            p_tam = float(p.get('tamano') or 0)
+            p_uni = str(p.get('unidad') or "").lower()
+            
+            # Solo bloquea si coinciden de forma idéntica todos los parámetros obligatorios llenos
             if nom_norm == p_nom and mar_norm == p_mar and tam_norm == p_tam and uni_norm == p_uni:
                 return "atributos", p
     return None, None
@@ -93,7 +100,7 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE RESETEO AUTOMATICO POR CONTADOR v10.4.2) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA SANEADO v10.5.0) ---
 with t2:
     st.subheader("Formulario de Carga Ágil")
     
@@ -122,10 +129,11 @@ with t2:
         marca_final = f2_c2.text_input("✍️ Caja de Trabajo: Digita o edita la Marca", value=val_def_marca, key=f"w_marca_{f_idx}", placeholder="Escribe la marca aquí...")
 
     st.write("---")
-    # --- FILA 3: TAMAÑO Y UNIDAD DE MEDIDA ---
+    # --- FILA 3: TAMAÑO Y UNIDAD DE MEDIDA (CORREGIDA v10.5.0) ---
     st.markdown("### 📏 3. Contenido Neto")
     f3_c1, f3_c2 = st.columns(2)
-    tam = f3_c1.number_input("Tamaño / Peso (Sube de 1 en 1 con + y -)", min_value=0.0, step=1.0, key=f"n_tam_{f_idx}", value=0.0)
+    # value=None inicializa la caja completamente vacía para que no tengas que borrar ningún cero con el teclado
+    tam = f3_c1.number_input("Tamaño / Peso (Caja vacía de arranque)", min_value=0.0, step=1.0, key=f"n_tam_{f_idx}", value=None, placeholder="Ej: 500, 1, 250")
     uni = f3_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key=f"n_uni_{f_idx}")
     
     st.write("---")
@@ -159,9 +167,10 @@ with t2:
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         str_nombre = str(nombre_final).strip() if nombre_final is not None else ""
         str_marca = str(marca_final).strip() if marca_final is not None else ""
+        float_tam = float(tam) if tam is not None else 0.0
         
         if str_nombre != "":
-            tipo_error, clon = validar_producto_existente(str_nombre, str_marca, barras, tam, uni)
+            tipo_error, clon = validar_producto_existente(str_nombre, str_marca, barras, float_tam, uni)
             
             if tipo_error and not forzar_guardado:
                 st.error(f"🚨 CLON DETECTADO EN EL BOTÓN: Ya existe un registro para '{clon['nombre']}' marca '{clon['marca']}'.")
@@ -178,17 +187,15 @@ with t2:
 
                 paquete_datos = {
                     "nombre": str_nombre, "marca": str_marca if str_marca != "" else None, "codigo_barras": barras if barras else None,
-                    "tamano": float(tam), "unidad": uni, "url_imagen": url_img, "id_cat": id_cat_val, "id_subcat": id_subcat_val
+                    "tamano": float_tam, "unidad": uni, "url_imagen": url_img, "id_cat": id_cat_val, "id_subcat": id_subcat_val
                 }
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
                     
-                    # --- SOLUCIÓN DE INGENIERÍA v10.4.2: INCREMENTO DE CONTADOR ---
-                    # Al sumar 1, todas las llaves de los campos cambian y se vacían al instante en la recarga
+                    # Rompemos las llaves sumando 1 al contador para vaciar la pantalla a blanco
                     st.session_state["pos_form_counter"] += 1
-                    
-                    st.success(f"🎉 ¡Producto registrado exitosamente!")
+                    st.success("🎉 ¡Producto registrado exitosamente!")
                     st.rerun()
                 except Exception as servidor_error:
                     st.error(f"🚨 Supabase rechazó el registro debido al siguiente motivo: {servidor_error}")
