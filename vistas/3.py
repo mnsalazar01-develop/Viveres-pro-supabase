@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES SUB-NUMÉRICO MAESTRO ---
-VERSION_MODULO = "v3.3.1 - Scroll Libre Nativo sin Borrado"
+VERSION_MODULO = "v3.4.0 - Llenado Inteligente Libre"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -87,31 +87,33 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
         
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE SCROLL LIBRE v3.3.1) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE MOTOR HÍBRIDO v3.4.0) ---
 with t2:
     st.subheader("Formulario de Carga")
     
-    # Extraemos las opciones existentes del catálogo
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE Y MARCA (CAMPOS LIBRES CON AUTOCOMPLETADO DE NAVEGADOR) ---
+    # --- FILA 1: NOMBRE Y MARCA (LLENADO INTELIGENTE INTEGRAL CON TEXT_INPUT EDITABLE) ---
     f1_c1, f1_c2 = st.columns(2)
     
     with f1_c1:
-        # Inyectamos una datalist HTML invisible para que el text_input se comporte como un scroll inteligente libre
-        html_nombres = "".join([f'<option value="{n}">' for n in lista_nombres_existentes])
-        st.markdown(f'<datalist id="lista_nombres">{html_nombres}</datalist>', unsafe_allow_html=True)
-        # Cuadro de texto que recibe el autocompletado pero no borra nada al dar TAB o ENTER
-        nombre_final = st.text_input("Nombre del Producto*", key="n_nom_libre", placeholder="Escribe o selecciona de la lista...")
-        st.markdown(f'<script>document.getElementsByName("n_nom_libre")[0].setAttribute("list", "lista_nombres");</script>', unsafe_allow_html=True)
+        # Selector de ayuda predictivo que no interfiere en la escritura
+        s_nom_helper = st.selectbox("🔍 Filtrar Nombres existentes:", ["--- Crear Término Nuevo ---"] + lista_nombres_existentes, key="helper_nom")
+        if s_nom_helper == "--- Crear Término Nuevo ---":
+            nombre_final = st.text_input("Nombre del Producto*", key="n_nom_libre", placeholder="Digita el nombre nuevo aquí...", value="")
+        else:
+            nombre_final = s_nom_helper
+            st.success(f"Fijado: **{nombre_final}**")
                 
     with f1_c2:
-        # Inyectamos la lista de marcas al autocompletado del segundo campo
-        html_marcas = "".join([f'<option value="{m}">' for m in lista_marcas_existentes])
-        st.markdown(f'<datalist id="lista_marcas">{html_marcas}</datalist>', unsafe_allow_html=True)
-        marca_final = st.text_input("Marca del Producto", key="n_mar_libre", placeholder="Escribe o selecciona la marca...")
-        st.markdown(f'<script>document.getElementsByName("n_mar_libre")[0].setAttribute("list", "lista_marcas");</script>', unsafe_allow_html=True)
+        # Selector de ayuda predictivo para marcas
+        s_mar_helper = st.selectbox("🔍 Filtrar Marcas existentes:", ["--- Crear Marca Nueva ---"] + lista_marcas_existentes, key="helper_mar")
+        if s_mar_helper == "--- Crear Marca Nueva ---":
+            marca_final = st.text_input("Marca del Producto", key="n_mar_libre", placeholder="Digita la marca nueva aquí...", value="")
+        else:
+            marca_final = s_mar_helper
+            st.success(f"Fijado: **{marca_final}**")
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
     f2_c1, f2_c2 = st.columns(2)
@@ -138,11 +140,11 @@ with t2:
         f4_c2.image(foto, caption="Miniatura cargada", width=140)
 
     st.write("---")
-    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Ignorar alertas de similitud)", key="n_forzar")
+    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
 
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         print(f"\n=== INTERCEPCIÓN EN CONSOLA (Motor {VERSION_MODULO}) ===")
-        print(f"-> Nombre capturado del scroll: '{nombre_final}' | Marca: '{marca_final}'")
+        print(f"-> Nombre capturado: '{nombre_final}' | Marca: '{marca_final}'")
         
         if nombre_final and str(nombre_final).strip() != "":
             tipo_error, clon = validar_producto_existente(nombre_final, marca_final, barras, tam, uni)
