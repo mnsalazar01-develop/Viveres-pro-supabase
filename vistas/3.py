@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES ARQUITECTURA POS DEFINITIVA ---
-VERSION_MODULO = "v8.0.0 - Buscador Predictivo Híbrido POS"
+# --- CONTROL DE VERSIONES ARQUITECTURA POS PROFESIONAL ---
+VERSION_MODULO = "v9.0.0 - Sistema de Carga Asistida POS Pro"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,11 +12,11 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Cabecera oficial para verificar la actualización visual en pantalla
+# Cabecera oficial para control visual del check
 st.title("📦 Administración de Productos")
 st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 
-# 2. CARGA DE BASE DE DATOS MAESTRA PARA CONCORDANCIA PASIVA
+# 2. CARGA DE BASE DE DATOS MAESTRA (BACKEND LIGERO)
 try:
     res_p = supabase.table("productos").select("*").order("nombre").execute()
     lista_productos_maestra = res_p.data if res_p.data else []
@@ -84,56 +84,65 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA HÍBRIDO POS v8.0.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA ASISTIDO POS v9.0.0) ---
 with t2:
-    st.subheader("Formulario de Carga")
+    st.subheader("Formulario de Carga Ágil")
     
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE Y MARCA (SISTEMA DATALIST HTML5 INMUNE A BORRADOS) ---
-    f1_c1, f1_c2 = st.columns(2)
+    # --- FILA 1: NOMBRE DEL PRODUCTO ---
+    st.markdown("### 🛒 1. Nombre del Artículo")
+    f1_c1, f1_c2 = st.columns([1, 1])
     
     with f1_c1:
-        # Creamos el contenedor de sugerencias nativo del navegador para los nombres
-        html_n = "".join([f'<option value="{n}">' for n in lista_nombres_existentes])
-        st.markdown(f'<datalist id="sug_nombres">{html_n}</datalist>', unsafe_allow_html=True)
-        
-        # El text_input recibe el atributo 'list' vía HTML para activar el scroll predictivo sin la rigidez de Streamlit
-        nombre_final = st.text_input("Nombre del Producto*", key="n_nom_libre", placeholder="Teclea para buscar o registrar...")
-        st.markdown(f'<script>document.querySelector("input[aria-label=\'Nombre del Producto*\']").setAttribute("list", "sug_nombres");</script>', unsafe_allow_html=True)
-                
+        # Selector de consulta rápida: si el usuario elige algo de aquí, se auto-copia abajo
+        s_nom_lookup = st.selectbox("🔍 Buscar Nombre registrado (Opcional):", ["--- Es un Nombre Nuevo ---"] + lista_nombres_existentes, key="lk_nom")
+        val_def_nombre = "" if s_nom_lookup == "--- Es un Nombre Nuevo ---" else s_nom_lookup
     with f1_c2:
-        # Contenedor de sugerencias nativo para las marcas
-        html_m = "".join([f'<option value="{m}">' for m in lista_marcas_existentes])
-        st.markdown(f'<datalist id="sug_marcas">{html_m}</datalist>', unsafe_allow_html=True)
-        
-        marca_final = st.text_input("Marca del Producto", key="n_mar_libre", placeholder="Teclea para buscar o registrar...")
-        st.markdown(f'<script>document.querySelector("input[aria-label=\'Marca del Producto\']").setAttribute("list", "sug_marcas");</script>', unsafe_allow_html=True)
+        # Caja de Trabajo Real: texto plano nativo, NUNCA se borra con el TAB o ENTER
+        nombre_final = st.text_input("✍️ Caja de Trabajo: Digita o edita el Nombre*", value=val_def_nombre, key="w_nombre", placeholder="Escribe el nombre aquí...")
 
-    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
-    f2_c1, f2_c2 = st.columns(2)
-    tam = f2_c1.number_input("Tamaño / Peso (Sube de 1 en 1 con + y -)", min_value=0.0, step=1.0, value=0.0, key="n_tam")
-    uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
+    st.write("---")
+    # --- FILA 2: MARCA DEL PRODUCTO ---
+    st.markdown("### 🏷️ 2. Marca Comercial")
+    f2_c1, f2_c2 = st.columns([1, 1])
     
-    # --- FILA 3: CLASIFICACIÓN COMERCIAL JERÁRQUICA ---
+    with f2_c1:
+        s_mar_lookup = st.selectbox("🔍 Buscar Marca registrada (Opcional):", ["--- Es una Marca Nueva ---"] + lista_marcas_existentes, key="lk_mar")
+        val_def_marca = "" if s_mar_lookup == "--- Es una Marca Nueva ---" else s_mar_scroll = s_mar_lookup
+    with f2_c2:
+        marca_final = st.text_input("✍️ Caja de Trabajo: Digita o edita la Marca", value=val_def_marca, key="w_marca", placeholder="Escribe la marca aquí...")
+
+    st.write("---")
+    # --- FILA 3: TAMAÑO Y UNIDAD DE MEDIDA ---
+    st.markdown("### 📏 3. Contenido Neto")
     f3_c1, f3_c2 = st.columns(2)
-    categoria_sel = f3_c1.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key="n_cat")
+    tam = f3_c1.number_input("Tamaño / Peso (Sube de 1 en 1 con + y -)", min_value=0.0, step=1.0, value=0.0, key="n_tam")
+    uni = f3_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
+    
+    st.write("---")
+    # --- FILA 4: CLASIFICACIÓN COMERCIAL JERÁRQUICA ---
+    st.markdown("### 🗂️ 4. Clasificación Jerárquica")
+    f4_c1, f4_c2 = st.columns(2)
+    categoria_sel = f4_c1.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key="n_cat")
     
     subcat_opciones = ["--- Seleccionar ---"]
     if categoria_sel != "--- Seleccionar ---":
         id_cat_actual = cat_dict[categoria_sel]
         res_sub_filtradas = supabase.table("subcategorias").select("*").eq("id_cat", id_cat_actual).order("nombre").execute()
         if res_sub_filtradas.data: subcat_opciones += [s['nombre'] for s in res_sub_filtradas.data]
-    subcategoria_sel = f3_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key="n_sub")
+    subcategoria_sel = f4_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key="n_sub")
     
-    # --- FILA 4: SKU (CÓDIGO DE BARRAS) Y FOTO MULTIMEDIA ---
-    f4_c1, f4_c2 = st.columns(2)
-    barras = f4_c1.text_input("Código de Barras (SKU)", key="n_bar", value="", placeholder="Escribe o escanea el código...").strip()
-    foto = f4_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
+    st.write("---")
+    # --- FILA 5: SKU (CÓDIGO DE BARRAS) Y FOTO MULTIMEDIA ---
+    st.markdown("### 🔍 5. Parámetros de Control")
+    f5_c1, f5_c2 = st.columns(2)
+    barras = f5_c1.text_input("Código de Barras (SKU)", key="n_bar", value="", placeholder="Escribe o escanea el código...").strip()
+    foto = f5_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
     
     if foto:
-        f4_c2.image(foto, caption="Miniatura cargada", width=140)
+        f5_c2.image(foto, caption="Miniatura cargada", width=140)
 
     st.write("---")
     forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
@@ -143,14 +152,10 @@ with t2:
         str_nombre = str(nombre_final).strip() if nombre_final is not None else ""
         str_marca = str(marca_final).strip() if marca_final is not None else ""
         
-        print(f"\n=== TERMINAL DE VERIFICACIÓN {VERSION_MODULO} ===")
-        print(f"-> Variable Capturada Nombre: '{str_nombre}' | Marca: '{str_marca}'")
-        
         if str_nombre != "":
             tipo_error, clon = validar_producto_existente(str_nombre, str_marca, barras, tam, uni)
             
             if tipo_error and not forzar_guardado:
-                print(f"[CHECK {VERSION_MODULO}] Guardado detenido: Duplicado.")
                 st.error(f"🚨 CLON DETECTADO EN EL BOTÓN: Ya existe un registro para '{clon['nombre']}' marca '{clon['marca']}'.")
             else:
                 url_img = subir_a_storage(foto) if foto else None
@@ -161,7 +166,7 @@ with t2:
                     try:
                         res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                         if res_id_sub.data and len(res_id_sub.data) > 0:
-                            id_subcat_val = res_id_sub.data['id_subcat']
+                            id_subcat_val = res_id_sub.data[0]['id_subcat']
                     except Exception as err_sub:
                         id_subcat_val = None
 
@@ -169,19 +174,15 @@ with t2:
                     "nombre": str_nombre, "marca": str_marca if str_marca != "" else None, "codigo_barras": barras if barras else None,
                     "tamano": float(tam), "unidad": uni, "url_imagen": url_img, "id_cat": id_cat_val, "id_subcat": id_subcat_val
                 }
-                
-                print(f"[CHECK {VERSION_MODULO}] Enviando a base de datos: {paquete_datos}")
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
-                    print(f"[CHECK {VERSION_MODULO}] ¡Inserción de registro completada!")
                     st.success(f"🎉 ¡Producto registrado exitosamente! (Procesado por Motor {VERSION_MODULO})")
                     st.rerun()
                 except Exception as servidor_error:
-                    print(f"[CHECK {VERSION_MODULO}] Error en servidor: {servidor_error}")
                     st.error(f"🚨 Supabase rechazó el registro debido al siguiente motivo: {servidor_error}")
         else:
-            st.warning("El campo 'Nombre del Producto' es obligatorio para poder procesar la carga.")
+            st.warning("El campo 'Caja de Trabajo: Nombre del Producto' es obligatorio.")
 
 # --- PESTAÑA 3: MODIFICAR / ELIMINAR ---
 with t3:
@@ -226,7 +227,7 @@ with t3:
                     try:
                         res_id_sub_e = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
                         if res_id_sub_e.data and len(res_id_sub_e.data) > 0:
-                            v_s = res_id_sub_e.data['id_subcat']
+                            v_s = res_id_sub_e.data[0]['id_subcat']
                     except: v_s = None
                         
                 try:
@@ -239,4 +240,3 @@ with t3:
                 supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
                 st.warning("Producto eliminado de la base de datos."); st.rerun()
             except Exception as e: st.error(f"No se pudo elminar: {e}")
-    else: st.info("El catálogo está vacío.")
