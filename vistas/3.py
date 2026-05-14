@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES OFICIAL ---
-VERSION_MODULO = "v3.1 - Carga Ágil Saneada"
+VERSION_MODULO = "v3.2 - Mapeo Seguro de Nulos"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,7 +12,7 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Desplegamos el título con su indicador de versión para control visual del usuario
+# Desplegamos el título con su indicador de versión para control visual en el check
 st.title("📦 Administración de Productos")
 st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 
@@ -42,11 +42,9 @@ def subir_a_storage(archivo):
         except: return None
     return None
 
-# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS BLINDADA CONTRA CAMPOS VACÍOS ---
+# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS ---
 def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
-    # PRINT DE CONTROL EN CONSOLA (Check de arranque del Escudo)
-    print(f"\n[CHECK v3.1] Iniciando validación para: Nombre={nombre}, Marca={marca}, Barras={barras}")
-    
+    print(f"\n[CHECK {VERSION_MODULO}] Evaluando duplicados en Supabase...")
     if barras and str(barras).strip() != "":
         query_barras = supabase.table("productos").select("*").eq("codigo_barras", barras)
         if id_excluir: query_barras = query_barras.neq("id_producto", id_excluir)
@@ -65,7 +63,7 @@ def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir
         
         for p in res_textos.data:
             p_nom = "".join((p.get('nombre') or "").lower().split())
-            p_mar = "".join((p.get('marca') or "").lower().split())
+            p_mar = "".join((p.get('marca'] or "").lower().split())
             p_tam = float(p.get('tamano') or 0)
             p_uni = (p.get('unidad') or "").lower()
             
@@ -85,14 +83,14 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
         
-# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO MAESTRO v3.1) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO LIMPIO EN 4 FILAS) ---
 with t2:
     st.subheader("Formulario de Carga")
     
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in res_p.data if p.get('nombre')]))) if res_p.data else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in res_p.data if p.get('marca') and p['marca'].strip() != ""]))) if res_p.data else []
     
-    # --- FILA 1: NOMBRE Y MARCA (BUSCADORES INTELIGENTES) ---
+    # --- FILA 1: NOMBRE Y MARCA (BUSCADORES INTELIGENTES CON TEXT_INPUT) ---
     f1_c1, f1_c2 = st.columns(2)
     s_nom = f1_c1.selectbox("🔍 Buscar Nombre de Producto existente:", ["--- Escribir un Nombre Nuevo ---"] + lista_nombres_existentes, key="s_nom_box")
     if s_nom == "--- Escribir un Nombre Nuevo ---":
@@ -134,28 +132,30 @@ with t2:
     forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
 
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
-        # PRINTS DE CHECK EN CONSOLA: Monitorean los valores recolectados del teclado
-        print("\n=== CHECK DE INTERCEPCIÓN EN CONSOLA (Motor v3.1) ===")
-        print(f"-> Nombre final capturado: '{nombre_final}'")
-        print(f"-> Marca final capturada: '{marca_final}'")
-        print(f"-> Tamaño ingresado: {tam} | Unidad: {uni}")
-        print(f"-> SKU de barra: '{barras}'")
+        print(f"\n=== INTERCEPCIÓN EN CONSOLA (Motor {VERSION_MODULO}) ===")
+        print(f"-> Nombre: '{nombre_final}' | Marca: '{marca_final}'")
+        print(f"-> Categoría: '{categoria_sel}' | Subcategoría: '{subcategoria_sel}'")
         
         if nombre_final and str(nombre_final).strip() != "":
             tipo_error, clon = validar_producto_existente(nombre_final, marca_final, barras, tam, uni)
             
             if tipo_error and not forzar_guardado:
-                print("[CHECK v3.1] Guardado detenido por detección de duplicado.")
+                print(f"[CHECK {VERSION_MODULO}] Guardado cancelado: Duplicado detectado.")
                 st.error(f"🚨 CLON DETECTADO EN EL BOTÓN: Ya existe un registro para '{clon['nombre']}' marca '{clon['marca']}'.")
             else:
                 url_img = subir_a_storage(foto) if foto else None
                 id_cat_val = cat_dict[categoria_sel] if categoria_sel != "--- Seleccionar ---" else None
                 
+                # --- CORRECCIÓN INTEGRADA v3.2: BLINDAJE CONTRA EXCEPCIONES DE FILTRADO NULO ---
                 id_subcat_val = None
                 if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
-                    res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
-                    if res_id_sub.data:
-                        id_subcat_val = res_id_sub.data[0]['id_subcat']
+                    try:
+                        res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
+                        if res_id_sub.data and len(res_id_sub.data) > 0:
+                            id_subcat_val = res_id_sub.data[0]['id_subcat']
+                    except Exception as err_sub:
+                        print(f"[CHECK {VERSION_MODULO}] Advertencia en mapeo de subcategoría: {err_sub}")
+                        id_subcat_val = None
 
                 paquete_datos = {
                     "nombre": nombre_final.strip(),
@@ -168,15 +168,15 @@ with t2:
                     "id_subcat": id_subcat_val
                 }
                 
-                print(f"[CHECK v3.1] Datos limpios listos para enviar a Supabase: {paquete_datos}")
+                print(f"[CHECK {VERSION_MODULO}] Enviando a Supabase: {paquete_datos}")
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
-                    print("[CHECK v3.1] ¡Inserción completada de forma exitosa en el servidor!")
+                    print(f"[CHECK {VERSION_MODULO}] ¡Registro guardado exitosamente en el servidor!")
                     st.success(f"🎉 ¡Producto registrado exitosamente! (Procesado por Motor {VERSION_MODULO})")
                     st.rerun()
                 except Exception as servidor_error:
-                    print(f"[CHECK v3.1] FATAL - Supabase rechazó el paquete. Razón: {servidor_error}")
+                    print(f"[CHECK {VERSION_MODULO}] Error al insertar en Supabase: {servidor_error}")
                     st.error(f"🚨 Supabase rechazó el registro debido al siguiente motivo: {servidor_error}")
         else:
             st.warning("El campo 'Nombre' es obligatorio para poder procesar la carga.")
@@ -220,8 +220,11 @@ with t3:
                 v_c = cat_dict[ecat] if ecat != "--- Seleccionar ---" else None
                 v_s = None
                 if esub != "--- Seleccionar ---" and v_c is not None:
-                    res_id_sub_e = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
-                    if res_id_sub_e.data: v_s = res_id_sub_e.data[0]['id_subcat']
+                    try:
+                        res_id_sub_e = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
+                        if res_id_sub_e.data and len(res_id_sub_e.data) > 0:
+                            v_s = res_id_sub_e.data[0]['id_subcat']
+                    except: v_s = None
                         
                 try:
                     supabase.table("productos").update({"nombre": en, "marca": em if em else None, "codigo_barras": eb if eb else None, "tamano": et, "unidad": eu, "url_imagen": n_url, "id_cat": v_c, "id_subcat": v_s}).eq("id_producto", p_e['id_producto']).execute()
