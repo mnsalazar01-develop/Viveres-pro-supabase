@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES ARQUITECTURA POS PROFESIONAL ---
-VERSION_MODULO = "v9.0.1 - Parche de Sintaxis de Asignación"
+VERSION_MODULO = "v10.1.0 - Corrección de Subcategoría POS"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -27,9 +27,11 @@ try:
     lista_cat = [c['nombre'] for c in res_c.data] if res_c.data else []
 
     res_sc = supabase.table("subcategorias").select("*").order("nombre").execute()
+    lista_subcat_maestra = res_sc.data if res_sc.data else []
     subcat_inv_dict = {sc['id_subcat']: sc['nombre'] for sc in res_sc.data} if res_sc.data else {}
 except:
     lista_productos_maestra = []
+    lista_subcat_maestra = []
     cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
 
 # --- FUNCIÓN PARA SUBIR IMÁGENES ---
@@ -84,7 +86,7 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA ASISTIDO POS v9.0.1) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA ASISTIDO POS v10.1.0) ---
 with t2:
     st.subheader("Formulario de Carga Ágil")
     
@@ -110,7 +112,6 @@ with t2:
         s_mar_lookup = f2_c1.selectbox("🔍 Buscar Marca registrada (Opcional):", ["--- Es una Marca Nueva ---"] + lista_marcas_existentes, key="lk_mar")
         val_def_marca = "" if s_mar_lookup == "--- Es una Marca Nueva ---" else s_mar_lookup
     with f2_c2:
-        # CORREGIDO: Removida la doble asignación errónea de la línea 113
         marca_final = f2_c2.text_input("✍️ Caja de Trabajo: Digita o edita la Marca", value=val_def_marca, key="w_marca", placeholder="Escribe la marca aquí...")
 
     st.write("---")
@@ -129,8 +130,7 @@ with t2:
     subcat_opciones = ["--- Seleccionar ---"]
     if categoria_sel != "--- Seleccionar ---":
         id_cat_actual = cat_dict[categoria_sel]
-        res_sub_filtradas = supabase.table("subcategorias").select("*").eq("id_cat", id_cat_actual).order("nombre").execute()
-        if res_sub_filtradas.data: subcat_opciones += [s['nombre'] for s in res_sub_filtradas.data]
+        subcat_opciones += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_actual]
     subcategoria_sel = f4_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key="n_sub")
     
     st.write("---")
@@ -158,16 +158,15 @@ with t2:
                 st.error(f"🚨 CLON DETECTADO EN EL BOTÓN: Ya existe un registro para '{clon['nombre']}' marca '{clon['marca']}'.")
             else:
                 url_img = subir_a_storage(foto) if foto else None
-                id_cat_val = cat_dict[categoria_sel] if categoria_sel != "--- Seleccionar ---" else None
+                id_cat_val = cat_dict.get(categoria_sel) if categoria_sel != "--- Seleccionar ---" else None
                 
+                # --- CORRECCIÓN DE INDEXACIÓN DE SUBCATEGORÍA v10.1.0 ---
                 id_subcat_val = None
                 if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
-                    try:
-                        res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
-                        if res_id_sub.data and len(res_id_sub.data) > 0:
-                            id_subcat_val = res_id_sub.data['id_subcat']
-                    except Exception as err_sub:
-                        id_subcat_val = None
+                    for sc in lista_subcat_maestra:
+                        if sc.get('nombre') == subcategoria_sel and sc.get('id_cat') == id_cat_val:
+                            id_subcat_val = sc.get('id_subcat')
+                            break
 
                 paquete_datos = {
                     "nombre": str_nombre, "marca": str_marca if str_marca != "" else None, "codigo_barras": barras if barras else None,
@@ -206,8 +205,8 @@ with t3:
         
         l_sub_e = ["--- Seleccionar ---"]
         if ecat != "--- Seleccionar ---":
-            r_se = supabase.table("subcategorias").select("*").eq("id_cat", cat_dict[ecat]).order("nombre").execute()
-            if r_se.data: l_sub_e += [s['nombre'] for s in r_se.data]
+            id_cat_mod = cat_dict.get(ecat)
+            l_sub_e += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_mod]
         s_act = subcat_inv_dict.get(p_e['id_subcat'], "--- Seleccionar ---")
         esub = ec2.selectbox("Modificar Subcategoría", l_sub_e, index=l_sub_e.index(s_act) if s_act in l_sub_e else 0, key="e_s")
         
@@ -221,13 +220,13 @@ with t3:
             else:
                 n_url = subir_a_storage(ef) if ef else p_e['url_imagen']
                 v_c = cat_dict.get(ecat) if ecat != "--- Seleccionar ---" else None
+                
                 v_s = None
                 if esub != "--- Seleccionar ---" and v_c is not None:
-                    try:
-                        res_id_sub_e = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
-                        if res_id_sub_e.data and len(res_id_sub_e.data) > 0:
-                            v_s = res_id_sub_e.data['id_subcat']
-                    except: v_s = None
+                    for sc in lista_subcat_maestra:
+                        if sc.get('nombre') == esub and sc.get('id_cat') == v_c:
+                            v_s = sc.get('id_subcat')
+                            break
                         
                 try:
                     supabase.table("productos").update({"nombre": en, "marca": em if em else None, "codigo_barras": eb if eb else None, "tamano": et, "unidad": eu, "url_imagen": n_url, "id_cat": v_c, "id_subcat": v_s}).eq("id_producto", p_e['id_producto']).execute()
