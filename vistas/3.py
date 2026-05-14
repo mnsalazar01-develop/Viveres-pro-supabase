@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES ARQUITECTURA POS PROFESIONAL ---
-VERSION_MODULO = "v10.5.0 - Blindaje de Similitud y Entrada Libre de Peso"
+VERSION_MODULO = "v10.6.0 - Rediseño Simétrico de Fila 1"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -50,18 +50,16 @@ def subir_a_storage(archivo):
         except: return None
     return None
 
-# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS (CORREGIDA v10.5.0) ---
+# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS ---
 def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
-    # Validación por código de barras estricta
     if barras and str(barras).strip() != "":
         res_barras = supabase.table("productos").select("*").eq("codigo_barras", barras).execute()
         if res_barras.data:
-            if id_excluir and res_barras.data[0].get('id_producto') == id_excluir:
+            if id_excluir and res_barras.data.get('id_producto') == id_excluir:
                 pass
             else:
-                return "barras", res_barras.data[0]
+                return "barras", res_barras.data
 
-    # Validación combinada por atributos de texto reales
     if lista_productos_maestra and nombre and str(nombre).strip() != "":
         nom_norm = "".join(str(nombre).lower().split())
         mar_norm = "".join(str(marca or "").lower().split())
@@ -77,7 +75,6 @@ def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir
             p_tam = float(p.get('tamano') or 0)
             p_uni = str(p.get('unidad') or "").lower()
             
-            # Solo bloquea si coinciden de forma idéntica todos los parámetros obligatorios llenos
             if nom_norm == p_nom and mar_norm == p_mar and tam_norm == p_tam and uni_norm == p_uni:
                 return "atributos", p
     return None, None
@@ -100,47 +97,41 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA SANEADO v10.5.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (REDISEÑO DE FILA 1 UNIFICADA v10.6.0) ---
 with t2:
     st.subheader("Formulario de Carga Ágil")
     
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE DEL PRODUCTO ---
-    st.markdown("### 🛒 1. Nombre del Artículo")
+    # --- FILA 1: NOMBRE Y MARCA UNIFICADAS LADO A LADO ---
+    st.markdown("### 🛒 Identificación del Vívere")
     f1_c1, f1_c2 = st.columns(2)
     
     with f1_c1:
-        s_nom_lookup = f1_c1.selectbox("🔍 Buscar Nombre registrado (Opcional):", ["--- Es un Nombre Nuevo ---"] + lista_nombres_existentes, key=f"lk_nom_{f_idx}")
+        # Columna de Nombre: Selector arriba, Caja de texto limpio directamente abajo
+        s_nom_lookup = st.selectbox("🔍 Buscar Nombre registrado (Opcional):", ["--- Es un Nombre Nuevo ---"] + lista_nombres_existentes, key=f"lk_nom_{f_idx}")
         val_def_nombre = "" if s_nom_lookup == "--- Es un Nombre Nuevo ---" else s_nom_lookup
+        nombre_final = st.text_input("Nombre del Producto*", value=val_def_nombre, key=f"w_nombre_{f_idx}", placeholder="Escribe el nombre aquí...")
+        
     with f1_c2:
-        nombre_final = f1_c2.text_input("✍️ Caja de Trabajo: Digita o edita el Nombre*", value=val_def_nombre, key=f"w_nombre_{f_idx}", placeholder="Escribe el nombre aquí...")
-
-    st.write("---")
-    # --- FILA 2: MARCA DEL PRODUCTO ---
-    st.markdown("### 🏷️ 2. Marca Comercial")
-    f2_c1, f2_c2 = st.columns(2)
-    
-    with f2_c1:
-        s_mar_lookup = f2_c1.selectbox("🔍 Buscar Marca registrada (Opcional):", ["--- Es una Marca Nueva ---"] + lista_marcas_existentes, key=f"lk_mar_{f_idx}")
+        # Columna de Marca: Selector arriba, Caja de texto limpio directamente abajo
+        s_mar_lookup = st.selectbox("🔍 Buscar Marca registrada (Opcional):", ["--- Es una Marca Nueva ---"] + lista_marcas_existentes, key=f"lk_mar_{f_idx}")
         val_def_marca = "" if s_mar_lookup == "--- Es una Marca Nueva ---" else s_mar_lookup
-    with f2_c2:
-        marca_final = f2_c2.text_input("✍️ Caja de Trabajo: Digita o edita la Marca", value=val_def_marca, key=f"w_marca_{f_idx}", placeholder="Escribe la marca aquí...")
+        marca_final = st.text_input("Marca del Producto", value=val_def_marca, key=f"w_marca_{f_idx}", placeholder="Escribe la marca aquí...")
 
     st.write("---")
-    # --- FILA 3: TAMAÑO Y UNIDAD DE MEDIDA (CORREGIDA v10.5.0) ---
-    st.markdown("### 📏 3. Contenido Neto")
-    f3_c1, f3_c2 = st.columns(2)
-    # value=None inicializa la caja completamente vacía para que no tengas que borrar ningún cero con el teclado
-    tam = f3_c1.number_input("Tamaño / Peso (Caja vacía de arranque)", min_value=0.0, step=1.0, key=f"n_tam_{f_idx}", value=None, placeholder="Ej: 500, 1, 250")
-    uni = f3_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key=f"n_uni_{f_idx}")
+    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
+    st.markdown("### 📏 Contenido Neto")
+    f2_c1, f2_c2 = st.columns(2)
+    tam = f2_c1.number_input("Tamaño / Peso (Caja vacía de arranque)", min_value=0.0, step=1.0, key=f"n_tam_{f_idx}", value=None, placeholder="Ej: 500, 1, 250")
+    uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key=f"n_uni_{f_idx}")
     
     st.write("---")
-    # --- FILA 4: CLASIFICACIÓN COMERCIAL JERÁRQUICA ---
-    st.markdown("### 🗂️ 4. Clasificación Jerárquica")
-    f4_c1, f4_c2 = st.columns(2)
-    categoria_sel = f4_c1.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key=f"n_cat_{f_idx}")
+    # --- FILA 3: CLASIFICACIÓN COMERCIAL JERÁRQUICA ---
+    st.markdown("### 🗂️ Clasificación Jerárquica")
+    f3_c1, f3_c2 = st.columns(2)
+    categoria_sel = f3_c1.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key=f"n_cat_{f_idx}")
     
     subcat_opciones = ["--- Seleccionar ---"]
     if categoria_sel != "--- Seleccionar ---":
@@ -148,14 +139,14 @@ with t2:
         if id_cat_actual is not None:
             subcat_opciones += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_actual]
             
-    subcategoria_sel = f4_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key=f"n_sub_{f_idx}")
+    subcategoria_sel = f3_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key=f"n_sub_{f_idx}")
     
     st.write("---")
-    # --- FILA 5: SKU (CÓDIGO DE BARRAS) Y FOTO MULTIMEDIA ---
-    st.markdown("### 🔍 5. Parámetros de Control")
-    f5_c1, f5_c2 = st.columns(2)
-    barras = f5_c1.text_input("Código de Barras (SKU)", key=f"n_bar_{f_idx}", value="", placeholder="Escribe o escanea el código...").strip()
-    foto = f5_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key=f"n_foto_{f_idx}")
+    # --- FILA 4: SKU (CÓDIGO DE BARRAS) Y FOTO MULTIMEDIA ---
+    st.markdown("### 🔍 Parámetros de Control")
+    f4_c1, f4_c2 = st.columns(2)
+    barras = f4_c1.text_input("Código de Barras (SKU)", key=f"n_bar_{f_idx}", value="", placeholder="Escribe o escanea el código...").strip()
+    foto = f4_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key=f"n_foto_{f_idx}")
     
     if foto:
         st.image(foto, caption="Miniatura cargada", width=140)
@@ -192,15 +183,13 @@ with t2:
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
-                    
-                    # Rompemos las llaves sumando 1 al contador para vaciar la pantalla a blanco
                     st.session_state["pos_form_counter"] += 1
                     st.success("🎉 ¡Producto registrado exitosamente!")
                     st.rerun()
                 except Exception as servidor_error:
                     st.error(f"🚨 Supabase rechazó el registro debido al siguiente motivo: {servidor_error}")
         else:
-            st.warning("El campo 'Caja de Trabajo: Nombre del Producto' es obligatorio.")
+            st.warning("El campo 'Nombre del Producto*' es obligatorio.")
 
 # --- PESTAÑA 3: MODIFICAR / ELIMINAR ---
 with t3:
