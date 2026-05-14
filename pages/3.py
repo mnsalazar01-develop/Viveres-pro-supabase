@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# 1. VERIFICACIÓN DE CONEXIÓN CENTRAL
+# 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
     st.error("Conexión central no encontrada. Por favor, regresa al inicio.")
     st.stop()
@@ -72,7 +72,7 @@ with t1:
 with t2:
     st.subheader("Formulario de Carga Ágil")
     
-    # AUTOCOMPLETAR INTELIGENTE: Buscador superior en tiempo real
+    # AUTOCOMPLETAR INTELIGENTE (Punto 1)
     lista_autocompletar = ["➕ Registrar Producto Nuevo (Campos Vacíos)"]
     prod_mapeo = {}
     if not df_p.empty:
@@ -92,25 +92,25 @@ with t2:
     val_marca = p_ref.get("marca", "")
     val_barras = p_ref.get("codigo_barras", "")
     
-    # AJUSTE DE TAMAÑO LIMPIO: Si es nuevo, arranca en None (vacío)
+    # TAMAÑO LIMPIO (Punto 2): Si es nuevo, arranca en None (totalmente vacío)
     val_tamano = float(p_ref["tamano"]) if "tamano" in p_ref and p_ref["tamano"] is not None else None
     
     idx_unidad = ["gr", "kg", "ml", "lt", "unidad"].index(p_ref["unidad"]) if "unidad" in p_ref and p_ref["unidad"] in ["gr", "kg", "ml", "lt", "unidad"] else 0
     cat_actual_auto = cat_inv_dict.get(p_ref.get("id_cat"), "--- Seleccionar ---")
     subcat_actual_auto = subcat_inv_dict.get(p_ref.get("id_subcat"), "--- Seleccionar ---")
 
-    # DISEÑO FORMULARIO DE ENTRADA
+    # DISEÑO FORMULARIO DE ENTRADA CON ENFOQUE SOLICITADO
     c1, c2 = st.columns(2)
     nombre = c1.text_input("Nombre del Producto*", value=val_nombre, key="n_nom")
     marca = c2.text_input("Marca", value=val_marca, key="n_mar")
     barras = c1.text_input("Código de Barras", value=val_barras, key="n_bar").strip()
     
-    # CONTADOR EN UNIDADES ENTERAS: step=1.0 e inicio en blanco (value=val_tamano)
+    # CONTADOR EN UNIDADES ENTERAS (Punto 3): step=1.0 e inicio en blanco (value=val_tamano)
     tam = c2.number_input("Tamaño / Peso (Sube de 1 en 1)", min_value=0.0, step=1.0, value=val_tamano, key="n_tam")
     uni = c1.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], index=idx_unidad, key="n_uni")
     foto = c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
     
-    # SELECTORES JERÁRQUICOS REACTIVOS COLOCADOS AL FINAL
+    # SELECTORES JERÁRQUICOS COLOCADOS AL FINAL DEL FORMULARIO
     l_cat_f = ["--- Seleccionar ---"] + lista_cat
     idx_c_f = l_cat_f.index(cat_actual_auto) if cat_actual_auto in l_cat_f else 0
     categoria_sel = c1.selectbox("Categoría Principal (Orden Numérico)", l_cat_f, index=idx_c_f, key="n_cat")
@@ -128,7 +128,6 @@ with t2:
 
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         if nombre:
-            # Validamos duplicados solo si el usuario no forzó la carga
             tipo_error, clon = validar_producto_existente(nombre, marca, barras, tam, uni)
             if tipo_error and not forzar_guardado:
                 st.error(f"🚨 CLON DETECTADO: Los datos coinciden con el producto '{clon['nombre']}' de la marca '{clon['marca']}'. Usa la casilla de forzar si deseas guardarlo de todas formas.")
@@ -166,7 +165,6 @@ with t3:
         eu = ec1.selectbox("Modificar Unidad", ["gr", "kg", "ml", "lt", "unidad"], index=["gr", "kg", "ml", "lt", "unidad"].index(p_e['unidad']) if p_e['unidad'] in ["gr", "kg", "ml", "lt", "unidad"] else 0)
         ef = ec2.file_uploader("Cambiar Imagen", type=['jpg', 'png', 'jpeg', 'webp'])
         
-        # VARIABLE CORREGIDA AQUÍ: Cambiado c_inv_dict por cat_inv_dict
         c_act = cat_inv_dict.get(p_e['id_cat'], "--- Seleccionar ---")
         l_cat_e = ["--- Seleccionar ---"] + lista_cat
         ecat = ec1.selectbox("Modificar Categoría Principal", l_cat_e, index=l_cat_e.index(c_act) if c_act in l_cat_e else 0, key="e_c")
