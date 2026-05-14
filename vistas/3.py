@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES ARQUITECTURA POS PROFESIONAL ---
-VERSION_MODULO = "v10.1.0 - Corrección de Subcategoría POS"
+VERSION_MODULO = "v10.2.0 - Limpieza Absoluta Post-Guardado"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,7 +12,7 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Cabecera oficial para control visual del check
+# Cabecera oficial para verificar la actualización visual en pantalla
 st.title("📦 Administración de Productos")
 st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 
@@ -86,7 +86,7 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA ASISTIDO POS v10.1.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA ASISTIDO POS v10.2.0) ---
 with t2:
     st.subheader("Formulario de Carga Ágil")
     
@@ -141,7 +141,7 @@ with t2:
     foto = f5_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
     
     if foto:
-        f5_c2.image(foto, caption="Miniatura cargada", width=140)
+        st.image(foto, caption="Miniatura cargada", width=140)
 
     st.write("---")
     forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
@@ -160,7 +160,6 @@ with t2:
                 url_img = subir_a_storage(foto) if foto else None
                 id_cat_val = cat_dict.get(categoria_sel) if categoria_sel != "--- Seleccionar ---" else None
                 
-                # --- CORRECCIÓN DE INDEXACIÓN DE SUBCATEGORÍA v10.1.0 ---
                 id_subcat_val = None
                 if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
                     for sc in lista_subcat_maestra:
@@ -175,6 +174,14 @@ with t2:
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
+                    
+                    # --- CORRECCIÓN INTEGRADA v10.2.0: VACIADO FORZADO DE MEMORIA DE INTERFAZ ---
+                    # Eliminamos los estados guardados de los widgets para que arranquen limpios en blanco en la recarga
+                    claves_a_limpiar = ["lk_nom", "w_nombre", "lk_mar", "w_marca", "n_tam", "n_uni", "n_cat", "n_sub", "n_bar", "n_foto"]
+                    for k in claves_a_limpiar:
+                        if k in st.session_state:
+                            del st.session_state[k]
+                            
                     st.success(f"🎉 ¡Producto registrado exitosamente! (Procesado por Motor {VERSION_MODULO})")
                     st.rerun()
                 except Exception as servidor_error:
