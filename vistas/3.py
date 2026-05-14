@@ -63,7 +63,7 @@ def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir
         
         for p in res_textos.data:
             p_nom = "".join((p.get('nombre') or "").lower().split())
-            p_mar = "".join((p.get('marca'] or "").lower().split())
+            p_mar = "".join((p.get('marca') or "").lower().split())
             p_tam = float(p.get('tamano') or 0)
             p_uni = (p.get('unidad') or "").lower()
             
@@ -126,7 +126,7 @@ with t2:
     foto = f4_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
     
     if foto:
-        f4_c2.image(foto, caption="Miniatura", width=140)
+        f4_c2.image(foto, caption="Miniatura cargada", width=140)
 
     st.write("---")
     forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
@@ -146,12 +146,12 @@ with t2:
                 url_img = subir_a_storage(foto) if foto else None
                 id_cat_val = cat_dict[categoria_sel] if categoria_sel != "--- Seleccionar ---" else None
                 
-                # --- CORRECCIÓN INTEGRADA v3.2: BLINDAJE CONTRA EXCEPCIONES DE FILTRADO NULO ---
                 id_subcat_val = None
                 if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
                     try:
                         res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                         if res_id_sub.data and len(res_id_sub.data) > 0:
+                            # CORREGIDO: Cierre redondo de paréntesis nativo de Python para la extracción
                             id_subcat_val = res_id_sub.data[0]['id_subcat']
                     except Exception as err_sub:
                         print(f"[CHECK {VERSION_MODULO}] Advertencia en mapeo de subcategoría: {err_sub}")
