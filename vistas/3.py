@@ -4,7 +4,7 @@ from datetime import datetime
 from streamlit_searchbox import st_searchbox
 
 # --- CONTROL DE VERSIONES ARQUITECTURA AVANZADA ---
-VERSION_MODULO = "v6.0.0 - Llenado Inteligente st_searchbox POS"
+VERSION_MODULO = "v6.0.1 - Conversión de Texto Segura"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -20,7 +20,7 @@ st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 # 2. CAPA DE BACKEND AISLADA: FUNCIONES DE BÚSQUEDA DINÁMICA BAJO DEMANDA
 def buscar_nombres_supabase(search_term: str):
     """Viaja a la base de datos en milisegundos y trae coincidencias que inicien con el texto tipeado"""
-    if not search_term or len(search_term).strip() == "":
+    if not search_term or str(search_term).strip() == "":
         return []
     try:
         res = supabase.table("productos").select("nombre").ilike("nombre", f"{search_term}%").execute()
@@ -31,7 +31,7 @@ def buscar_nombres_supabase(search_term: str):
 
 def buscar_marcas_supabase(search_term: str):
     """Busca marcas generales bajo demanda en Supabase según lo que digite el usuario"""
-    if not search_term or len(search_term).strip() == "":
+    if not search_term or str(search_term).strip() == "":
         return []
     try:
         res = supabase.table("productos").select("marca").ilike("marca", f"{search_term}%").execute()
@@ -101,15 +101,14 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (COMPONENTE INTEGRAL DE BUSQUEDA LIBRE CON ST_SEARCHBOX v6.0.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE MOTOR HÍBRIDO PRO v6.0.1) ---
 with t2:
     st.subheader("Formulario de Carga")
     
-    # --- FILA 1: NOMBRE Y MARCA (CAMPOS INTELIGENTES CON TOTAL LIBERTAD DE ESCRITURA Y FILTRADO) ---
+    # --- FILA 1: NOMBRE Y MARCA (CAMPOS CON FILTRADO BAJO DEMANDA Y ENTRADA LIBRE FIJA) ---
     f1_c1, f1_c2 = st.columns(2)
     
     with f1_c1:
-        # st_searchbox actúa como caja de texto plano pero con sugerencias flotantes: no borra letras con el TAB
         nombre_final = st_searchbox(
             search_function=buscar_nombres_supabase,
             placeholder="Teclea para buscar o escribe un nombre nuevo...",
@@ -152,11 +151,15 @@ with t2:
 
     # --- CAPA DE PROCESAMIENTO INTERNO EN EL BOTÓN ---
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
-        print(f"\n=== TERMINAL DE VERIFICACIÓN {VERSION_MODULO} ===")
-        print(f"-> Variable Extraída Nombre: '{nombre_final}' | Marca: '{marca_final}'")
+        # CORREGIDO v6.0.1: Forzamos conversión a str() para evitar colapsos por tipos enteros (int)
+        str_nombre = str(nombre_final).strip() if nombre_final is not None else ""
+        str_marca = str(marca_final).strip() if marca_final is not None else ""
         
-        if nombre_final and str(nombre_final).strip() != "":
-            tipo_error, clon = validar_producto_existente(nombre_final, marca_final, barras, tam, uni)
+        print(f"\n=== TERMINAL DE VERIFICACIÓN {VERSION_MODULO} ===")
+        print(f"-> Variable Extraída Nombre: '{str_nombre}' | Marca: '{str_marca}'")
+        
+        if str_nombre != "":
+            tipo_error, clon = validar_producto_existente(str_nombre, str_marca, barras, tam, uni)
             
             if tipo_error and not forzar_guardado:
                 print(f"[CHECK {VERSION_MODULO}] Guardado detenido: Duplicado.")
@@ -170,14 +173,14 @@ with t2:
                     try:
                         res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                         if res_id_sub.data and len(res_id_sub.data) > 0:
-                            id_subcat_val = res_id_sub.data[0]['id_subcat']
+                            id_subcat_val = res_id_sub.data['id_subcat']
                     except Exception as err_sub:
                         print(f"Advertencia en subcategoría: {err_sub}")
                         id_subcat_val = None
 
                 paquete_datos = {
-                    "nombre": str(nombre_final).strip(),
-                    "marca": str(marca_final).strip() if marca_final and str(marca_final).strip() != "" else None,
+                    "nombre": str_nombre,
+                    "marca": str_marca if str_marca != "" else None,
                     "codigo_barras": barras if barras else None,
                     "tamano": float(tam),
                     "unidad": uni,
@@ -190,7 +193,7 @@ with t2:
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
-                    print(f"[CHECK {VERSION_MODULO}] ¡Inserción completada!")
+                    print(f"[CHECK {VERSION_MODULO}] ¡Inserción de registro completada!")
                     st.success(f"🎉 ¡Producto registrado exitosamente! (Procesado por Motor {VERSION_MODULO})")
                     st.rerun()
                 except Exception as servidor_error:
@@ -242,7 +245,7 @@ with t3:
                     try:
                         res_id_sub_e = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
                         if res_id_sub_e.data and len(res_id_sub_e.data) > 0:
-                            v_s = res_id_sub_e.data[0]['id_subcat']
+                            v_s = res_id_sub_e.data['id_subcat']
                     except: v_s = None
                         
                 try:
@@ -255,3 +258,4 @@ with t3:
                 supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
                 st.warning("Producto eliminado de la base de datos."); st.rerun()
             except Exception as e: st.error(f"No se pudo elminar: {e}")
+    else: st.info("El catálogo está vacío.")
