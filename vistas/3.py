@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES OFICIAL DE AGILIDAD ---
-VERSION_MODULO = "v3.9.0 - Buscador Predictivo sin Bloqueo"
+# --- CONTROL DE VERSIONES OFICIAL ---
+VERSION_MODULO = "v4.0.0 - Caja Única Predictiva POS"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,11 +12,11 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Cabecera visual estricta para auditar la actualización en Streamlit Cloud
+# Cabecera oficial para control visual del check
 st.title("📦 Administración de Productos")
 st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 
-# 2. CARGA DE BASE DE DATOS MAESTRA PARA AUTOCOMPLETADO (BACKEND PASIVO)
+# 2. CARGA DE BASE DE DATOS MAESTRA PARA AUTOCOMPLETADO
 try:
     res_p = supabase.table("productos").select("*").order("nombre").execute()
     lista_productos_maestra = res_p.data if res_p.data else []
@@ -42,7 +42,7 @@ def subir_a_storage(archivo):
         except: return None
     return None
 
-# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS (CAPA LÓGICA DE CONTROL) ---
+# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS (CAPA LÓGICA DE BACKEND) ---
 def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
     if barras and str(barras).strip() != "":
         query_barras = supabase.table("productos").select("*").eq("codigo_barras", barras)
@@ -86,31 +86,20 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE ENTRADA LIBRE ASISTIDA v3.9.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (CAJA ÚNICA INTELIGENTE v4.0.0) ---
 with t2:
     st.subheader("Formulario de Carga")
     
-    # Universo de datos cargados para los expansores predictivos de apoyo
+    # Extraemos las opciones de autocompletado en caliente
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE Y MARCA (CAMPOS LIBRES DE TEXT_INPUT QUE NUNCA BORRAN EL TAB/ENTER) ---
+    # --- FILA 1: NOMBRE Y MARCA (AUTOCOMPLETADO INTELIGENTE INTEGRADO SIN BORRADOS CON TAB) ---
     f1_c1, f1_c2 = st.columns(2)
     
-    with f1_c1:
-        # Caja de entrada libre: puedes escribir lo que quieras y jamás se borrará con TAB o ENTER
-        nombre_final = st.text_input("Nombre del Producto*", key="w_nombre", placeholder="Escribe el nombre del vívere...")
-        # Asistente predictivo: si el usuario quiere ver qué hay, abre el filtro interactivo abajo
-        if lista_nombres_existentes:
-            with st.expander("🔍 Sugerencias: Ver nombres registrados"):
-                st.caption(", ".join(lista_nombres_existentes))
-
-    with f1_c2:
-        # Caja de entrada libre para la marca
-        marca_final = st.text_input("Marca del Producto", key="w_marca", placeholder="Escribe la marca comercial...")
-        if lista_marcas_existentes:
-            with st.expander("🔍 Sugerencias: Ver marcas registradas"):
-                st.caption(", ".join(lista_marcas_existentes))
+    # El parámetro autocomplete inyecta el listado al motor del navegador de forma nativa: si no existe, congela lo tipeado
+    nombre_final = f1_c1.text_input("Nombre del Producto*", key="w_nombre", autocomplete=lista_nombres_existentes, placeholder="Teclea para buscar o registrar nuevo...")
+    marca_final = f1_c2.text_input("Marca del Producto", key="w_marca", autocomplete=lista_marcas_existentes, placeholder="Teclea para buscar o registrar nueva...")
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
     f2_c1, f2_c2 = st.columns(2)
@@ -140,8 +129,9 @@ with t2:
     forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
 
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
-        print(f"\n=== TERMINAL DE CONTROL {VERSION_MODULO} ===")
-        print(f"-> Variable de Trabajo Nombre: '{nombre_final}' | Marca: '{marca_final}'")
+        print(f"\n=== TERMINAL DE CONTROL v4.0.0 ===")
+        print(f"-> Variable de Trabajo Nombre: '{nombre_final}'")
+        print(f"-> Variable de Trabajo Marca: '{marca_final}'")
         
         if nombre_final and str(nombre_final).strip() != "":
             tipo_error, clon = validar_producto_existente(nombre_final, marca_final, barras, tam, uni)
@@ -158,7 +148,8 @@ with t2:
                     try:
                         res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                         if res_id_sub.data and len(res_id_sub.data) > 0:
-                            id_subcat_val = res_id_sub.data[0]['id_subcat']
+                            primer_nodo = res_id_sub.data[0]
+                            id_subcat_val = primer_nodo.get('id_subcat')
                     except Exception as err_sub:
                         print(f"Advertencia en subcategoría: {err_sub}")
                         id_subcat_val = None
@@ -174,11 +165,11 @@ with t2:
                     "id_subcat": id_subcat_val
                 }
                 
-                print(f"[CHECK {VERSION_MODULO}] Enviando a base de datos: {paquete_datos}")
+                print(f"[CHECK {VERSION_MODULO}] Transmitiendo a Supabase: {paquete_datos}")
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
-                    print(f"[CHECK {VERSION_MODULO}] ¡Inserción completada!")
+                    print(f"[CHECK {VERSION_MODULO}] ¡Inserción de registro completada!")
                     st.success(f"🎉 ¡Producto registrado exitosamente! (Procesado por Motor {VERSION_MODULO})")
                     st.rerun()
                 except Exception as servidor_error:
@@ -240,6 +231,6 @@ with t3:
         if b_del.button("🗑️ Eliminar Producto Definitivamente"):
             try:
                 supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
-                st.warning("Producto eliminado de la base de datos."); st.rerun()
+                st.warning("Producto eliminado."); st.rerun()
             except Exception as e: st.error(f"No se pudo elminar: {e}")
     else: st.info("El catálogo está vacío.")
