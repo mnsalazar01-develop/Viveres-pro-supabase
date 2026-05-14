@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES ARQUITECTURA POS ULTRA COMPACTA ---
-VERSION_MODULO = "v10.7.0 - Interfaz POS Compacta sin Scroll"
+VERSION_MODULO = "v10.9.0 - Relleno Dinámico y Automático POS"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -16,10 +16,30 @@ supabase = st.session_state["supabase"]
 st.title("📦 Administración de Productos")
 st.caption(f"Motor: **{VERSION_MODULO}**")
 
+# Inicialización de contadores y estados de rellenado dinámico en la RAM
 if "pos_form_counter" not in st.session_state:
     st.session_state["pos_form_counter"] = 0
 
 f_idx = st.session_state["pos_form_counter"]
+
+# Inicializamos las llaves de las cajas de trabajo si no existen
+if f"input_nom_{f_idx}" not in st.session_state:
+    st.session_state[f"input_nom_{f_idx}"] = ""
+if f"input_mar_{f_idx}" not in st.session_state:
+    st.session_state[f"input_mar_{f_idx}"] = ""
+
+# --- FUNCIONES DE RELLENADO AUTOMÁTICO (CALLBACKS) ---
+def auto_rellenar_nombre():
+    idx = st.session_state["pos_form_counter"]
+    seleccionado = st.session_state[f"lk_nom_{idx}"]
+    if seleccionado and seleccionado != "--- Es un Nombre Nuevo ---":
+        st.session_state[f"input_nom_{idx}"] = seleccionado
+
+def auto_rellenar_marca():
+    idx = st.session_state["pos_form_counter"]
+    seleccionada = st.session_state[f"lk_mar_{idx}"]
+    if seleccionada and seleccionada != "--- Es una Marca Nueva ---":
+        st.session_state[f"input_mar_{idx}"] = seleccionada
 
 # 2. CARGA DE BASE DE DATOS MAESTRA (BACKEND LIGERO)
 try:
@@ -92,28 +112,28 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO INDUSTRIAL ULTRA COMPACTO v10.7.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE TRANSFERENCIA DIRECTA v10.9.0) ---
 with t2:
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE Y MARCA LADO A LADO ---
+    # --- FILA 1: NOMBRE Y MARCA (LLENADO AUTOMÁTICO EN TIEMPO REAL) ---
     f1_c1, f1_c2 = st.columns(2)
     with f1_c1:
-        s_nom_lookup = st.selectbox("🔍 Buscar Nombre (Opcional):", ["--- Es un Nombre Nuevo ---"] + lista_nombres_existentes, key=f"lk_nom_{f_idx}")
-        val_def_nombre = "" if s_nom_lookup == "--- Es un Nombre Nuevo ---" else s_nom_lookup
-        nombre_final = st.text_input("Nombre del Producto*", value=val_def_nombre, key=f"w_nombre_{f_idx}", placeholder="Nombre...")
+        # Al seleccionar un nombre, el callback dispara la copia directa al text_input de abajo
+        st.selectbox("🔍 Buscar Nombre (Opcional):", ["--- Es un Nombre Nuevo ---"] + lista_nombres_existentes, key=f"lk_nom_{f_idx}", on_change=auto_rellenar_nombre)
+        nombre_final = st.text_input("Nombre del Producto*", key=f"input_nom_{f_idx}", placeholder="Nombre final del artículo...")
     with f1_c2:
-        s_mar_lookup = st.selectbox("🔍 Buscar Marca (Opcional):", ["--- Es una Marca Nueva ---"] + lista_marcas_existentes, key=f"lk_mar_{f_idx}")
-        val_def_marca = "" if s_mar_lookup == "--- Es una Marca Nueva ---" else s_mar_lookup
-        marca_final = st.text_input("Marca del Producto", value=val_def_marca, key=f"w_marca_{f_idx}", placeholder="Marca...")
+        # Al seleccionar una marca, se rellena instantáneamente la caja de trabajo de la marca
+        st.selectbox("🔍 Buscar Marca (Opcional):", ["--- Es una Marca Nueva ---"] + lista_marcas_existentes, key=f"lk_mar_{f_idx}", on_change=auto_rellenar_marca)
+        marca_final = st.text_input("Marca del Producto", key=f"input_mar_{f_idx}", placeholder="Marca final del artículo...")
 
-    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA LADO A LADO ---
+    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
     f2_c1, f2_c2 = st.columns(2)
     tam = f2_c1.number_input("Tamaño / Peso (Vacio)", min_value=0.0, step=1.0, key=f"n_tam_{f_idx}", value=None, placeholder="Ej: 500, 250, 1")
     uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key=f"n_uni_{f_idx}")
     
-    # --- FILA 3: CATEGORÍA Y SUBCATEGORÍA LADO A LADO ---
+    # --- FILA 3: CATEGORÍA Y SUBCATEGORÍA ---
     f3_c1, f3_c2 = st.columns(2)
     categoria_sel = f3_c1.selectbox("Categoría Principal", ["--- Seleccionar ---"] + lista_cat, key=f"n_cat_{f_idx}")
     subcat_opciones = ["--- Seleccionar ---"]
@@ -123,7 +143,7 @@ with t2:
             subcat_opciones += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_actual]
     subcategoria_sel = f3_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key=f"n_sub_{f_idx}")
     
-    # --- FILA 4: SKU Y FOTO LADO A LADO ---
+    # --- FILA 4: SKU Y FOTO ---
     f4_c1, f4_c2 = st.columns(2)
     barras = f4_c1.text_input("Código de Barras (SKU)", key=f"n_bar_{f_idx}", value="", placeholder="Código de barras...").strip()
     foto = f4_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key=f"n_foto_{f_idx}")
@@ -131,14 +151,14 @@ with t2:
     if foto:
         st.image(foto, caption="Miniatura", width=140)
 
-    # --- FILA 5: BOTÓN Y CHECKBOX UNIFICADOS ---
-    fc1, fc2 = st.columns([1, 2])
+    # --- FILA 5: COMPRESIÓN DE BOTONES ---
+    fc1, fc2 = st.columns(2)
     forzar_guardado = fc1.checkbox("⚠️ Forzar registro", key=f"n_forzar_{f_idx}")
     guardar_btn = fc2.button("🚀 Guardar Producto en Catálogo", type="primary", use_container_width=True)
 
     if guardar_btn:
-        str_nombre = str(nombre_final).strip() if nombre_final is not None else ""
-        str_marca = str(marca_final).strip() if marca_final is not None else ""
+        str_nombre = str(nombre_final).strip() if nombre_final else ""
+        str_marca = str(marca_final).strip() if marca_final else ""
         float_tam = float(tam) if tam is not None else 0.0
         
         if str_nombre != "":
