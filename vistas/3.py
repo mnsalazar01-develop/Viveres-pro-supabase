@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES ARQUITECTURA LIMPIA ---
-VERSION_MODULO = "v3.5.0 - Control y Backend Aislados"
+# --- CONTROL DE VERSIONES OFICIAL ---
+VERSION_MODULO = "v3.6.0 - Arquitectura Cajas Espejo POS"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,32 +12,25 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Encabezado con subnúmero de versión estricto para check visual
+# Encabezado con versión visible para auditoría en tiempo real
 st.title("📦 Administración de Productos")
 st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 
-# 2. CAPA DE BACKEND AISLADA: CARGA PASIVA DE MEMORIA (DICCIONARIOS NATIVOS)
-# No operamos sobre los widgets; extraemos los datos a estructuras de lectura estáticas
-@st.cache_data(ttl=60)
-def cargar_datos_maestros_aislados():
-    try:
-        res_p = supabase.table("productos").select("*").order("nombre").execute()
-        lista_p = res_p.data if res_p.data else []
-        
-        res_c = supabase.table("categorias").select("*").order("id_cat").execute()
-        c_dict = {c['nombre']: c['id_cat'] for c in res_c.data} if res_c.data else {}
-        c_inv = {c['id_cat']: c['nombre'] for c in res_c.data} if res_c.data else {}
-        l_cat = [c['nombre'] for c in res_c.data] if res_c.data else []
+# 2. CARGA SEGURA DE RECONOCIMIENTO DESDE EL SERVIDOR (BACKEND)
+try:
+    res_p = supabase.table("productos").select("*").order("nombre").execute()
+    lista_productos_maestra = res_p.data if res_p.data else []
+    
+    res_c = supabase.table("categorias").select("*").order("id_cat").execute()
+    cat_dict = {c['nombre']: c['id_cat'] for c in res_c.data} if res_c.data else {}
+    cat_inv_dict = {c['id_cat']: c['nombre'] for c in res_c.data} if res_c.data else {}
+    lista_cat = [c['nombre'] for c in res_c.data] if res_c.data else []
 
-        res_sc = supabase.table("subcategorias").select("*").order("nombre").execute()
-        sc_inv = {sc['id_subcat']: sc['nombre'] for sc in res_sc.data} if res_sc.data else {}
-        
-        return lista_p, c_dict, c_inv, l_cat, sc_inv
-    except:
-        return [], {}, {}, [], {}
-
-# Ejecutamos la carga pasiva de backend en variables de trabajo independientes
-lista_productos_maestra, cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = cargar_datos_maestros_aislados()
+    res_sc = supabase.table("subcategorias").select("*").order("nombre").execute()
+    subcat_inv_dict = {sc['id_subcat']: sc['nombre'] for sc in res_sc.data} if res_sc.data else {}
+except:
+    lista_productos_maestra = []
+    cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
 
 # --- FUNCIÓN PARA SUBIR IMÁGENES ---
 def subir_a_storage(archivo):
@@ -51,7 +44,7 @@ def subir_a_storage(archivo):
 
 # --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS ---
 def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
-    print(f"\n[CHECK {VERSION_MODULO}] Ejecutando validación en capa lógica de backend...")
+    print(f"\n[CHECK {VERSION_MODULO}] Evaluando duplicados en la capa lógica...")
     if barras and str(barras).strip() != "":
         query_barras = supabase.table("productos").select("*").eq("codigo_barras", barras)
         if id_excluir: query_barras = query_barras.neq("id_producto", id_excluir)
@@ -76,7 +69,7 @@ def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir
                 return "atributos", p
     return None, None
 
-# 3. CAPA DE INTERFAZ (WIDGETS PASIVOS DE CAPTURA)
+# 3. INTERFAZ ORGANIZADA POR PESTAÑAS HOMOLOGADAS
 t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar/Borrar"])
 
 # --- PESTAÑA 1: VER CATÁLOGO ---
@@ -94,110 +87,116 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SEPARACIÓN TOTAL CONTROL-BACKEND) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (ARQUITECTURA CAJAS ESPEJO POS v3.6.0) ---
 with t2:
     st.subheader("Formulario de Carga")
     
-    # --- FILA 1: NOMBRE Y MARCA (CONTROLES PASIVOS, NO SE BORRAN CON TAB/ENTER) ---
-    f1_c1, f1_c2 = st.columns(2)
-    # Widgets de entrada independientes de la base de datos para retener el texto escrito libremente
-    nombre_capturado = f1_c1.text_input("Nombre del Producto*", key="w_nombre", placeholder="Escribe el nombre del vívere...")
-    marca_capturada = f1_c2.text_input("Marca del Producto", key="w_marca", placeholder="Escribe la marca comercial...")
-
-    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
-    f2_c1, f2_c2 = st.columns(2)
-    # Iniciamos en 0.0 para que el incremento de unidades esté habilitado de arranque en pasos enteras de 1.0
-    tam_capturado = f2_c1.number_input("Tamaño / Peso (Botones de 1 en 1)", min_value=0.0, step=1.0, value=0.0, key="w_tamano")
-    uni_capturada = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="w_unidad")
+    lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
+    lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 3: CLASIFICACIÓN JERÁRQUICA COMERCIAL ---
+    # --- FILA 1: NOMBRE (Buscador Predictivo + Caja de Trabajo Independiente) ---
+    st.markdown("### 🛒 Identificación del Vívere")
+    f1_c1, f1_c2 = st.columns(2)
+    
+    s_nom_scroll = f1_c1.selectbox("🔍 1. Buscar en Nombres existentes:", ["--- Es un Nombre Nuevo ---"] + lista_nombres_existentes, key="scroll_n")
+    val_def_nombre = "" if s_nom_scroll == "--- Es un Nombre Nuevo ---" else s_nom_scroll
+    # Esta es tu caja de trabajo real: es texto plano estático, nunca se borrará con TAB o ENTER
+    nombre_final = f1_c1.text_input("✍️ Caja de Trabajo: Nombre del Producto*", value=val_def_nombre, key="w_nombre", placeholder="Escribe o edita el nombre aquí...")
+
+    # --- FILA 2: MARCA (Buscador Predictivo + Caja de Trabajo Independiente) ---
+    s_mar_scroll = f1_c2.selectbox("🔍 2. Buscar en Marcas existentes:", ["--- Es una Marca Nueva ---"] + lista_marcas_existentes, key="scroll_m")
+    val_def_marca = "" if s_mar_scroll == "--- Es una Marca Nueva ---" else s_mar_scroll
+    # Esta es tu caja de trabajo real para la marca
+    marca_final = f1_c2.text_input("✍️ Caja de Trabajo: Marca del Producto", value=val_def_marca, key="w_marca", placeholder="Escribe o edita la marca aquí...")
+
+    st.write("---")
+    # --- FILA 3: TAMAÑO Y UNIDAD DE MEDIDA ---
+    st.markdown("### 📏 Dimensiones y Contenido")
+    f2_c1, f2_c2 = st.columns(2)
+    tam = f2_c1.number_input("Tamaño / Peso (Sube de 1 en 1 con + y -)", min_value=0.0, step=1.0, value=0.0, key="n_tam")
+    uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
+    
+    st.write("---")
+    # --- FILA 4: CLASIFICACIÓN JERÁRQUICA COMERCIAL ---
+    st.markdown("### 🗂️ Clasificación Comercial")
     f3_c1, f3_c2 = st.columns(2)
-    categoria_sel = f3_c1.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key="w_categoria")
+    categoria_sel = f3_c1.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key="n_cat")
     
     subcat_opciones = ["--- Seleccionar ---"]
     if categoria_sel != "--- Seleccionar ---":
-        id_cat_actual = cat_dict.get(categoria_sel)
-        if id_cat_actual is not None:
-            # Buscamos de forma aislada en la memoria maestra cargada por el backend
-            subcat_opciones += [s['nombre'] for s in subcat_inv_dict.values() if s == categoria_sel or any(p.get('id_cat') == id_cat_actual for p in lista_productos_maestra)]
-            # Refrescamos las opciones basándonos en la relación jerárquica limpia de Supabase
-            try:
-                res_sub_filtradas = supabase.table("subcategorias").select("*").eq("id_cat", id_cat_actual).order("nombre").execute()
-                if res_sub_filtradas.data:
-                    subcat_opciones = ["--- Seleccionar ---"] + [s['nombre'] for s in res_sub_filtradas.data]
-            except: pass
-    subcategoria_sel = f3_c2.selectbox("Subcategoría", subcat_opciones, key="w_subcategoria")
+        id_cat_actual = cat_dict[categoria_sel]
+        res_sub_filtradas = supabase.table("subcategorias").select("*").eq("id_cat", id_cat_actual).order("nombre").execute()
+        if res_sub_filtradas.data: subcat_opciones += [s['nombre'] for s in res_sub_filtradas.data]
+    subcategoria_sel = f3_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key="n_sub")
     
-    # --- FILA 4: IDENTIFICACIÓN (SKU) Y FOTO MULTIMEDIA ---
+    st.write("---")
+    # --- FILA 5: CÓDIGO DE BARRAS (SKU) Y FOTO ---
+    st.markdown("### 🏷️ Identificación Única y Multimedia")
     f4_c1, f4_c2 = st.columns(2)
-    barras_capturadas = f4_c1.text_input("Código de Barras (SKU)", key="w_barras", placeholder="Escribe o escanea el código de barras...").strip()
-    foto_capturada = f4_c2.file_uploader("Foto del Producto (Formatos de imagen)", type=['jpg', 'png', 'jpeg', 'webp'], key="w_foto")
+    barras = f4_c1.text_input("Código de Barras (SKU)", key="n_bar", placeholder="Escribe o escanea el código aquí...").strip()
+    foto = f4_c2.file_uploader("Foto del Producto (Formatos gráficos)", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
     
-    # Miniatura pequeña y elegante (width=140) aislada en su columna multimedia
-    if foto_capturada:
-        f4_c2.image(foto_capturada, caption="Miniatura cargada", width=140)
+    if foto:
+        f4_c2.image(foto, caption="Miniatura cargada", width=140)
 
     st.write("---")
-    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Ignorar alertas de similitud)", key="w_forzar")
+    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Ignorar alertas de similitud)", key="n_forzar")
 
-    # --- PROCESAMIENTO EXCLUSIVO EN EL BOTÓN (BACKEND LÓGICO COMPLETO) ---
+    # --- PROCESAMIENTO EXCLUSIVO EN EL BOTÓN ---
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
-        # Impresiones de verificación en consola (Check de variables de trabajo aisladas)
-        print(f"\n=== TERMINAL DE CONTROL (Motor {VERSION_MODULO}) ===")
-        print(f"-> Control Visual Nombre: '{nombre_capturado}'")
-        print(f"-> Control Visual Marca: '{marca_capturada}'")
-        print(f"-> Tamaño: {tam_capturado} | Unidad: {uni_capturada}")
+        print(f"\n=== TERMINAL DE VERIFICACIÓN (Motor {VERSION_MODULO}) ===")
+        print(f"-> Caja de Trabajo Nombre Leyendo: '{nombre_final}'")
+        print(f"-> Caja de Trabajo Marca Leyendo: '{marca_final}'")
+        print(f"-> Tamaño: {tam} | Unidad: {uni}")
         
-        if nombre_capturado and str(nombre_capturado).strip() != "":
-            # El escudo procesa los textos estáticos recolectados
-            tipo_error, clon = validar_producto_existente(nombre_capturado, marca_capturada, barras_capturadas, tam_capturado, uni_capturada)
+        if nombre_final and str(nombre_final).strip() != "":
+            tipo_error, clon = validar_producto_existente(nombre_final, marca_final, barras, tam, uni)
             
             if tipo_error and not forzar_guardado:
-                print(f"[CHECK {VERSION_MODULO}] Guardado rechazado: Conflicto de atributos detectado.")
+                print(f"[CHECK {VERSION_MODULO}] Registro bloqueado por similitud.")
                 st.error(f"🚨 CLON DETECTADO EN EL BOTÓN: Ya existe un registro para '{clon['nombre']}' marca '{clon['marca']}'.")
             else:
-                # El backend procesa las conversiones de IDs fuera de los controles gráficos
-                url_img = subir_a_storage(foto_capturada) if foto_capturada else None
-                id_cat_val = cat_dict.get(categoria_sel) if categoria_sel != "--- Seleccionar ---" else None
+                url_img = subir_a_storage(foto) if foto else None
+                id_cat_val = cat_dict[categoria_sel] if categoria_sel != "--- Seleccionar ---" else None
                 
                 id_subcat_val = None
                 if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
                     try:
                         res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                         if res_id_sub.data and len(res_id_sub.data) > 0:
-                            id_subcat_val = res_id_sub.data[0].get('id_subcat')
+                            # Extracción indexada posicional de backend pura
+                            id_subcat_val = res_id_sub.data[0]['id_subcat']
                     except Exception as err_sub:
                         print(f"[CHECK {VERSION_MODULO}] Advertencia en subcategoría: {err_sub}")
                         id_subcat_val = None
 
-                # Empaquetado final de variables de trabajo independientes
                 paquete_datos = {
-                    "nombre": str(nombre_capturado).strip(),
-                    "marca": str(marca_capturada).strip() if marca_capturada and str(marca_capturada).strip() != "" else None,
-                    "codigo_barras": barras_capturadas if barras_capturadas else None,
-                    "tamano": float(tam_capturado),
-                    "unidad": uni_capturada,
+                    "nombre": str(nombre_final).strip(),
+                    "marca": str(marca_final).strip() if marca_final and str(marca_final).strip() != "" else None,
+                    "codigo_barras": barras if barras else None,
+                    "tamano": float(tam),
+                    "unidad": uni,
                     "url_imagen": url_img,
                     "id_cat": id_cat_val,
                     "id_subcat": id_subcat_val
                 }
                 
-                print(f"[CHECK {VERSION_MODULO}] Enviando paquete de backend a Supabase: {paquete_datos}")
+                print(f"[CHECK {VERSION_MODULO}] Enviando paquete a base de datos: {paquete_datos}")
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
-                    print(f"[CHECK {VERSION_MODULO}] ¡Inserción completada de forma exitosa en el servidor!")
+                    print(f"[CHECK {VERSION_MODULO}] ¡Inserción completada con éxito!")
                     st.success(f"🎉 ¡Producto registrado exitosamente! (Procesado por Motor {VERSION_MODULO})")
                     st.rerun()
                 except Exception as servidor_error:
-                    print(f"[CHECK {VERSION_MODULO}] Error al insertar en Supabase: {servidor_error}")
+                    print(f"[CHECK {VERSION_MODULO}] Error en Supabase: {servidor_error}")
                     st.error(f"🚨 Supabase rechazó el registro debido al siguiente motivo: {servidor_error}")
         else:
-            st.warning("El campo 'Nombre del Producto' es obligatorio para procesar el guardado.")
+            st.warning("El campo 'Caja de Trabajo: Nombre del Producto' es obligatorio.")
 
 # --- PESTAÑA 3: MODIFICAR / ELIMINAR ---
 with t3:
-    if lista_productos_maestra:
+    if not df_p.empty:
         st.subheader("Gestión de un Producto Individual")
         prod_dict_e = {f"{p['nombre']} - {p['marca'] or 'Sin Marca'} ({p['tamano'] or 0}{p['unidad'] or ''})": p for p in lista_productos_maestra}
         sel_e = st.selectbox("Selecciona el producto específico que deseas modificar o eliminar:", list(prod_dict_e.keys()), key="s_e_p")
@@ -249,5 +248,5 @@ with t3:
             try:
                 supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
                 st.warning("Producto eliminado de la base de datos."); st.rerun()
-            except Exception as e: st.error(f"No se pudo eliminar: {e}")
+            except Exception as e: st.error(f"No se pudo elminar: {e}")
     else: st.info("El catálogo está vacío.")
