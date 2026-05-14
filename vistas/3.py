@@ -74,14 +74,14 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
         
-# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO EN 4 FILAS CORREGIDO) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO MAESTRO EN 4 FILAS) ---
 with t2:
     st.subheader("Formulario de Carga")
     
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in res_p.data if p.get('nombre')]))) if res_p.data else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in res_p.data if p.get('marca') and p['marca'].strip() != ""]))) if res_p.data else []
     
-    # --- FILA 1: NOMBRE Y MARCA (INDEPENDIENTES CON BUSCADOR) ---
+    # --- FILA 1: NOMBRE Y MARCA (INDEPENDIENTES CON BUSCADOR TIPO SCROLL) ---
     f1_c1, f1_c2 = st.columns(2)
     s_nom = f1_c1.selectbox("🔍 Buscar Nombre de Producto existente:", ["--- Escribir un Nombre Nuevo ---"] + lista_nombres_existentes, key="s_nom_box")
     if s_nom == "--- Escribir un Nombre Nuevo ---":
@@ -97,6 +97,7 @@ with t2:
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
     f2_c1, f2_c2 = st.columns(2)
+    # Iniciamos en 0.0 para que el contador esté activo y habilitado desde el primer milisegundo
     tam = f2_c1.number_input("Tamaño / Peso (Sube de 1 en 1)", min_value=0.0, step=1.0, value=0.0, key="n_tam")
     uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
     
@@ -125,7 +126,6 @@ with t2:
 
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         if nombre:
-            # CORREGIDO: Llamada de validación limpia y controlada con los 5 argumentos correctos
             tipo_error, clon = validar_producto_existente(nombre, marca, barras, tam, uni)
             
             if tipo_error and not forzar_guardado:
@@ -150,15 +150,22 @@ with t2:
                     supabase.table("productos").insert(paquete_datos).execute()
                     st.success("🎉 ¡Producto registrado exitosamente en el catálogo maestro!")
                     st.rerun()
-                except Exception as servidor_error:
-                    st.error(f"🚨 Supabase rechazó el registro debido al siguiente motivo: {servidor_error}")
+                except Exception as servidores_err:
+                    st.error(f"🚨 Supabase rechazó el registro: {servidores_err}")
         else: st.warning("El campo 'Nombre' es obligatorio para poder procesar la carga.")
 
-# --- PESTAÑA 3: MODIFICAR / ELIMINAR ---
+# --- PESTAÑA 3: MODIFICAR / ELIMINAR (SANEADA TOTALMENTE) ---
 with t3:
     if not df_p.empty:
         st.subheader("Gestión de un Producto Individual")
-        prod_dict_e = {f"{p['nombre']} - {p['marca'] or 'Sin Marca'} ({p['tamano'] or 0}{p['unidad'] or ''})": p for p in res_p.data}
+        
+        # SANEAMIENTO: Convertimos el DataFrame a registros diccionarios nativos para evitar fallas de Pandas
+        lista_records = df_p.to_dict(orient="records")
+        prod_dict_e = {}
+        for r in lista_records:
+            label_e = f"{r['nombre']} - {r['marca'] or 'Sin Marca'} ({r['tamano'] or 0}{r['unidad'] or ''})"
+            prod_dict_e[label_e] = r
+            
         sel_e = st.selectbox("Selecciona el producto específico que deseas modificar o eliminar:", list(prod_dict_e.keys()), key="s_e_p")
         p_e = prod_dict_e[sel_e]
         
