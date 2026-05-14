@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES ARQUITECTURA POS PROFESIONAL ---
-VERSION_MODULO = "v10.4.0 - Reseteo de Llaves de Estado POS"
+VERSION_MODULO = "v10.4.1 - Parche Asignación Duplicada Nombre"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -86,7 +86,7 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE RESETEO POR LLAVE v10.4.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE RESETEO v10.4.1) ---
 with t2:
     st.subheader("Formulario de Carga Ágil")
     
@@ -99,7 +99,8 @@ with t2:
     
     with f1_c1:
         s_nom_lookup = f1_c1.selectbox("🔍 Buscar Nombre registrado (Opcional):", ["--- Es un Nombre Nuevo ---"] + lista_nombres_existentes, key="lk_nom")
-        val_def_nombre = "" if s_nom_lookup == "--- Es un Nombre Nuevo ---" else s_nom_scroll = s_nom_lookup
+        # CORREGIDO v10.4.1: Eliminada la doble asignación incorrecta de la línea 102
+        val_def_nombre = "" if s_nom_lookup == "--- Es un Nombre Nuevo ---" else s_nom_lookup
     with f1_c2:
         nombre_final = f1_c2.text_input("✍️ Caja de Trabajo: Digita o edita el Nombre*", value=val_def_nombre, key="w_nombre", placeholder="Escribe el nombre aquí...")
 
@@ -122,7 +123,7 @@ with t2:
     uni = f3_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
     
     st.write("---")
-    # --- FILA 4: CLASIFICACIÓN COMERCIAL JERÁRQUICA (CORREGIDA v10.4.0) ---
+    # --- FILA 4: CLASIFICACIÓN COMERCIAL JERÁRQUICA ---
     st.markdown("### 🗂️ 4. Clasificación Jerárquica")
     f4_c1, f4_c2 = st.columns(2)
     categoria_sel = f4_c1.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key="n_cat")
@@ -177,7 +178,7 @@ with t2:
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
                     
-                    # --- RESURRECCIÓN Y LIMPIEZA DE LLAVES EN CALIENTE v10.4.0 ---
+                    # Limpieza controlada del buffer de la RAM
                     st.session_state["w_nombre"] = ""
                     st.session_state["w_marca"] = ""
                     st.session_state["n_tam"] = 0.0
