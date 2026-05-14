@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES ARQUITECTURA POS PROFESIONAL ---
-VERSION_MODULO = "v9.0.0 - Sistema de Carga Asistida POS Pro"
+VERSION_MODULO = "v9.0.1 - Parche de Sintaxis de Asignación"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -84,7 +84,7 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA ASISTIDO POS v9.0.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA ASISTIDO POS v9.0.1) ---
 with t2:
     st.subheader("Formulario de Carga Ágil")
     
@@ -93,26 +93,25 @@ with t2:
     
     # --- FILA 1: NOMBRE DEL PRODUCTO ---
     st.markdown("### 🛒 1. Nombre del Artículo")
-    f1_c1, f1_c2 = st.columns([1, 1])
+    f1_c1, f1_c2 = st.columns(2)
     
     with f1_c1:
-        # Selector de consulta rápida: si el usuario elige algo de aquí, se auto-copia abajo
-        s_nom_lookup = st.selectbox("🔍 Buscar Nombre registrado (Opcional):", ["--- Es un Nombre Nuevo ---"] + lista_nombres_existentes, key="lk_nom")
+        s_nom_lookup = f1_c1.selectbox("🔍 Buscar Nombre registrado (Opcional):", ["--- Es un Nombre Nuevo ---"] + lista_nombres_existentes, key="lk_nom")
         val_def_nombre = "" if s_nom_lookup == "--- Es un Nombre Nuevo ---" else s_nom_lookup
     with f1_c2:
-        # Caja de Trabajo Real: texto plano nativo, NUNCA se borra con el TAB o ENTER
-        nombre_final = st.text_input("✍️ Caja de Trabajo: Digita o edita el Nombre*", value=val_def_nombre, key="w_nombre", placeholder="Escribe el nombre aquí...")
+        nombre_final = f1_c2.text_input("✍️ Caja de Trabajo: Digita o edita el Nombre*", value=val_def_nombre, key="w_nombre", placeholder="Escribe el nombre aquí...")
 
     st.write("---")
     # --- FILA 2: MARCA DEL PRODUCTO ---
     st.markdown("### 🏷️ 2. Marca Comercial")
-    f2_c1, f2_c2 = st.columns([1, 1])
+    f2_c1, f2_c2 = st.columns(2)
     
     with f2_c1:
-        s_mar_lookup = st.selectbox("🔍 Buscar Marca registrada (Opcional):", ["--- Es una Marca Nueva ---"] + lista_marcas_existentes, key="lk_mar")
-        val_def_marca = "" if s_mar_lookup == "--- Es una Marca Nueva ---" else s_mar_scroll = s_mar_lookup
+        s_mar_lookup = f2_c1.selectbox("🔍 Buscar Marca registrada (Opcional):", ["--- Es una Marca Nueva ---"] + lista_marcas_existentes, key="lk_mar")
+        val_def_marca = "" if s_mar_lookup == "--- Es una Marca Nueva ---" else s_mar_lookup
     with f2_c2:
-        marca_final = st.text_input("✍️ Caja de Trabajo: Digita o edita la Marca", value=val_def_marca, key="w_marca", placeholder="Escribe la marca aquí...")
+        # CORREGIDO: Removida la doble asignación errónea de la línea 113
+        marca_final = f2_c2.text_input("✍️ Caja de Trabajo: Digita o edita la Marca", value=val_def_marca, key="w_marca", placeholder="Escribe la marca aquí...")
 
     st.write("---")
     # --- FILA 3: TAMAÑO Y UNIDAD DE MEDIDA ---
@@ -166,7 +165,7 @@ with t2:
                     try:
                         res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                         if res_id_sub.data and len(res_id_sub.data) > 0:
-                            id_subcat_val = res_id_sub.data[0]['id_subcat']
+                            id_subcat_val = res_id_sub.data['id_subcat']
                     except Exception as err_sub:
                         id_subcat_val = None
 
@@ -227,7 +226,7 @@ with t3:
                     try:
                         res_id_sub_e = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
                         if res_id_sub_e.data and len(res_id_sub_e.data) > 0:
-                            v_s = res_id_sub_e.data[0]['id_subcat']
+                            v_s = res_id_sub_e.data['id_subcat']
                     except: v_s = None
                         
                 try:
@@ -240,3 +239,4 @@ with t3:
                 supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
                 st.warning("Producto eliminado de la base de datos."); st.rerun()
             except Exception as e: st.error(f"No se pudo elminar: {e}")
+    else: st.info("El catálogo está vacío.")
