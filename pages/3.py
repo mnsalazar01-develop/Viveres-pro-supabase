@@ -36,7 +36,7 @@ def subir_a_storage(archivo):
         except: return None
     return None
 
-# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS (CAPA DE INGENIERÍA ROBUSTA) ---
+# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS (5 ARGUMENTOS OBLIGATORIOS) ---
 def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
     if barras:
         query_barras = supabase.table("productos").select("*").eq("codigo_barras", barras)
@@ -74,59 +74,60 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
         
-# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO ÁGIL MINIMALISTA) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (NUEVO DISEÑO ESTRUCTURADO) ---
 with t2:
     st.subheader("Formulario de Carga")
     
-    # Construcción de listas únicas existentes para alimentar los buscadores de texto
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in res_p.data if p.get('nombre')]))) if res_p.data else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in res_p.data if p.get('marca') and p['marca'].strip() != ""]))) if res_p.data else []
     
-    c1, c2 = st.columns(2)
-    
-    # CAMPOS DE ESCRITURA CON BUSCADOR INDEPENDIENTE TIPO SCROLL
-    # El usuario puede escribir un texto libre en los cuadros inferiores si el término es nuevo
-    s_nom = c1.selectbox("🔍 Buscar Nombre de Producto existente:", ["--- Escribir un Nombre Nuevo ---"] + lista_nombres_existentes, key="s_nom_box")
+    # --- FILA 1: NOMBRE Y MARCA (CON BUSCADOR INDEPENDIENTE) ---
+    f1_c1, f1_c2 = st.columns(2)
+    s_nom = f1_c1.selectbox("🔍 Buscar Nombre de Producto existente:", ["--- Escribir un Nombre Nuevo ---"] + lista_nombres_existentes, key="s_nom_box")
     if s_nom == "--- Escribir un Nombre Nuevo ---":
-        nombre = c1.text_input("Digita el Nombre del Nuevo Producto*", key="n_nom_input", placeholder="Ej: Arroz, Detergente, Leche")
+        nombre = f1_c1.text_input("Digita el Nombre del Nuevo Producto*", key="n_nom_input", placeholder="Ej: Arroz, Detergente, Leche")
     else:
         nombre = s_nom
-        c1.info(f"Seleccionado: **{nombre}**")
         
-    s_mar = c2.selectbox("🔍 Buscar Marca existente:", ["--- Escribir una Marca Nueva ---"] + lista_marcas_existentes, key="s_mar_box")
+    s_mar = f1_c2.selectbox("🔍 Buscar Marca existente:", ["--- Escribir una Marca Nueva ---"] + lista_marcas_existentes, key="s_mar_box")
     if s_mar == "--- Escribir una Marca Nueva ---":
-        marca = c2.text_input("Digita la Marca*", key="n_mar_input", placeholder="Ej: Diana, Vaaca, Las Llaves")
+        marca = f1_c2.text_input("Digita la Marca*", key="n_mar_input", placeholder="Ej: Diana, Vaaca, Las Llaves")
     else:
         marca = s_mar
-        c2.info(f"Seleccionado: **{marca}**")
+
+    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
+    f2_c1, f2_c2 = st.columns(2)
+    # Iniciamos en 0.0 para que el contador de + y - esté completamente activo desde el inicio
+    tam = f2_c1.number_input("Tamaño / Peso (Sube de 1 en 1)", min_value=0.0, step=1.0, value=0.0, key="n_tam")
+    uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
+    
+    # --- FILA 3: CÓDIGO DE BARRAS Y FOTO DEL PRODUCTO ---
+    f3_c1, f3_c2 = st.columns(2)
+    barras = f3_c1.text_input("Código de Barras", key="n_bar", placeholder="Escribe o escanea el código").strip()
+    foto = f3_c2.file_uploader("Foto del Producto (WebP, JPG, PNG)", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
+    
+    # VISOR MULTIMEDIA EN PANTALLA: Muestra la foto inmediatamente al ser cargada
+    if foto:
+        f3_c2.image(foto, caption="Vista previa de la imagen cargada", width=250)
 
     st.write("---")
-    c3, c4 = st.columns(2)
-    barras = c3.text_input("Código de Barras", key="n_bar").strip()
-    
-    # TAMAÑO TOTALMENTE VACÍO DE ARRANQUE CON BOTONES OPERATIVOS EN PASOS DE 1.0 EN 1.0
-    # Inicializa de manera segura en None para no forzar el valor 0.00 en pantalla
-    tam = c4.number_input("Tamaño / Peso (Contador Entero)", min_value=0.0, step=1.0, value=None, key="n_tam", placeholder="Digita o usa + y -")
-    
-    uni = c3.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
-    foto = c4.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
-    
-    # SELECTORES JERÁRQUICOS COLOCADOS ESTRICTAMENTE AL FINAL DEL FORMULARIO
-    categoria_sel = c3.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key="n_cat")
+    # --- FILA FINAL: SELECTORES DE CATEGORÍAS ---
+    f4_c1, f4_c2 = st.columns(2)
+    categoria_sel = f4_c1.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key="n_cat")
     
     subcat_opciones = ["--- Seleccionar ---"]
     if categoria_sel != "--- Seleccionar ---":
         id_cat_actual = cat_dict[categoria_sel]
         res_sub_filtradas = supabase.table("subcategorias").select("*").eq("id_cat", id_cat_actual).order("nombre").execute()
         if res_sub_filtradas.data: subcat_opciones += [s['nombre'] for s in res_sub_filtradas.data]
-    subcategoria_sel = c4.selectbox("Subcategoría (Reactiva)", subcat_opciones, key="n_sub")
+    subcategoria_sel = f4_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key="n_sub")
     
-    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Ignorar alertas de similitud)", key="n_forzar")
+    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
 
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         if nombre:
-            # La validación inteligente se detiene únicamente aquí, evaluando la combinación de los 4 atributos
-            tipo_error, clon = validar_producto_existente(nombre, marca, tam, uni)
+            # CORREGIDO: Se invocan los 5 argumentos correspondientes (incluyendo el código de barras)
+            tipo_error, clon = validar_producto_existente(nombre, marca, barras, tam, uni)
             
             if tipo_error and not forzar_guardado:
                 st.error(f"🚨 CLON DETECTADO EN EL BOTÓN: Ya existe un registro exacto para '{clon['nombre']}' marca '{clon['marca']}' de ({clon['tamano']} {clon['unidad']}).")
@@ -138,7 +139,7 @@ with t2:
                 id_subcat_val = None
                 if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
                     res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
-                    if res_id_sub.data: id_subcat_val = res_id_sub.data[0]['id_subcat']
+                    if res_id_sub.data: id_subcat_val = res_id_sub.data['id_subcat']
 
                 paquete_datos = {
                     "nombre": nombre, "marca": marca if marca else None, "codigo_barras": barras if barras else None,
@@ -151,12 +152,11 @@ with t2:
                     st.success("🎉 ¡Producto registrado exitosamente en el catálogo maestro!")
                     st.rerun()
                 except Exception as servidor_error:
-                    st.error("🚨 Supabase rechazó el registro debido al siguiente motivo:")
-                    st.info(f"**Mensaje del Servidor:** {servidor_error}")
+                    st.error(f"🚨 Supabase rechazó el registro debido al siguiente motivo: {servidor_error}")
 
         else: st.warning("El campo 'Nombre' es obligatorio para poder procesar la carga.")
 
-# --- PESTAÑA 3: MODIFICAR / ELIMINAR (UN PRODUCTO A LA VEZ) ---
+# --- PESTAÑA 3: MODIFICAR / ELIMINAR ---
 with t3:
     if not df_p.empty:
         st.subheader("Gestión de un Producto Individual")
@@ -196,7 +196,7 @@ with t3:
                 v_s = None
                 if esub != "--- Seleccionar ---" and v_c is not None:
                     res_id_sub_e = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
-                    if res_id_sub_e.data: v_s = res_id_sub_e.data[0]['id_subcat']
+                    if res_id_sub_e.data: v_s = res_id_sub_e.data['id_subcat']
                         
                 try:
                     supabase.table("productos").update({"nombre": en, "marca": em if em else None, "codigo_barras": eb if eb else None, "tamano": et, "unidad": eu, "url_imagen": n_url, "id_cat": v_c, "id_subcat": v_s}).eq("id_producto", p_e['id_producto']).execute()
