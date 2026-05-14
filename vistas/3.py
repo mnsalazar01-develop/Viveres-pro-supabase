@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from streamlit_searchbox import st_searchbox
 
-# --- CONTROL DE VERSIONES OFICIAL DE ALTA VELOCIDAD ---
-VERSION_MODULO = "v5.0.0 - Búsqueda Bajo Demanda por Letra"
+# --- CONTROL DE VERSIONES ARQUITECTURA AVANZADA ---
+VERSION_MODULO = "v6.0.0 - Llenado Inteligente st_searchbox POS"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,11 +13,34 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Cabecera visual estricta para auditar el refresco en Streamlit Cloud
+# Cabecera oficial para verificar la actualización visual en pantalla
 st.title("📦 Administración de Productos")
 st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 
-# 2. CARGA DE CATÁLOGOS BASE (Consultas estáticas ligeras para visualización)
+# 2. CAPA DE BACKEND AISLADA: FUNCIONES DE BÚSQUEDA DINÁMICA BAJO DEMANDA
+def buscar_nombres_supabase(search_term: str):
+    """Viaja a la base de datos en milisegundos y trae coincidencias que inicien con el texto tipeado"""
+    if not search_term or len(search_term).strip() == "":
+        return []
+    try:
+        res = supabase.table("productos").select("nombre").ilike("nombre", f"{search_term}%").execute()
+        nombres = sorted(list(set([p['nombre'] for p in res.data if p.get('nombre')]))) if res.data else []
+        return nombres
+    except:
+        return []
+
+def buscar_marcas_supabase(search_term: str):
+    """Busca marcas generales bajo demanda en Supabase según lo que digite el usuario"""
+    if not search_term or len(search_term).strip() == "":
+        return []
+    try:
+        res = supabase.table("productos").select("marca").ilike("marca", f"{search_term}%").execute()
+        marcas = sorted(list(set([p['marca'] for p in res.data if p.get('marca')]))) if res.data else []
+        return marcas
+    except:
+        return []
+
+# Carga estática de categorías y subcategorías para los selectores fijos inferiores
 try:
     res_c = supabase.table("categorias").select("*").order("id_cat").execute()
     cat_dict = {c['nombre']: c['id_cat'] for c in res_c.data} if res_c.data else {}
@@ -38,7 +62,7 @@ def subir_a_storage(archivo):
         except: return None
     return None
 
-# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS EN EL BOTÓN ---
+# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS (CAPA LOGICA DE SEGURIDAD) ---
 def validar_producto_existente(nombre, marca, barras, tamano, unidad):
     if barras and str(barras).strip() != "":
         res_barras = supabase.table("productos").select("*").eq("codigo_barras", barras).execute()
@@ -60,7 +84,7 @@ def validar_producto_existente(nombre, marca, barras, tamano, unidad):
                 return "atributos", p
     return None, None
 
-# 3. INTERFAZ ORGANIZADA POR PESTAÑAS HOMOLOGADAS
+# 3. CAPA DE INTERFAZ HOMOLOGADA POR PESTAÑAS
 t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar/Borrar"])
 
 # --- PESTAÑA 1: VER CATÁLOGO ---
@@ -77,42 +101,34 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (ESTRATEGIA BAJO DEMANDA v5.0.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (COMPONENTE INTEGRAL DE BUSQUEDA LIBRE CON ST_SEARCHBOX v6.0.0) ---
 with t2:
     st.subheader("Formulario de Carga")
     
-    # --- FILA 1: NOMBRE Y MARCA (ENTRADA LIBRE CON CONSULTA POR LETRA OPCIONAL) ---
-    st.markdown("<p style='color: #2bc443; font-weight: bold; margin-bottom: 2px;'>Fila 1: Datos de Identificación</p>", unsafe_allow_html=True)
+    # --- FILA 1: NOMBRE Y MARCA (CAMPOS INTELIGENTES CON TOTAL LIBERTAD DE ESCRITURA Y FILTRADO) ---
     f1_c1, f1_c2 = st.columns(2)
     
     with f1_c1:
-        # Tu caja de trabajo real: texto plano que nunca se borra con TAB o ENTER
-        nombre_final = st.text_input("Nombre del Producto*", key="w_nombre", placeholder="Escribe el nombre aquí...")
-        # Consultor bajo demanda: si el usuario escribe una letra, jala las coincidencias en caliente de Supabase
-        if nombre_final and len(nombre_final) == 1:
-            try:
-                res_filtro_n = supabase.table("productos").select("nombre").ilike("nombre", f"{nombre_final}%").execute()
-                sug_n = sorted(list(set([p['nombre'] for p in res_filtro_n.data]))) if res_filtro_n.data else []
-                if sug_n: st.caption(f"📝 Registrados con '{nombre_final.upper()}': " + ", ".join(sug_n[:10]))
-            except: pass
-
+        # st_searchbox actúa como caja de texto plano pero con sugerencias flotantes: no borra letras con el TAB
+        nombre_final = st_searchbox(
+            search_function=buscar_nombres_supabase,
+            placeholder="Teclea para buscar o escribe un nombre nuevo...",
+            key="w_nombre_searchbox"
+        )
+        
     with f1_c2:
-        marca_final = st.text_input("Marca del Producto", key="w_marca", placeholder="Escribe la marca aquí...")
-        if marca_final and len(marca_final) == 1:
-            try:
-                res_filtro_m = supabase.table("productos").select("marca").ilike("marca", f"{marca_final}%").execute()
-                sug_m = sorted(list(set([p['marca'] for p in res_filtro_m.data if p.get('marca')]))) if res_filtro_m.data else []
-                if sug_m: st.caption(f"🏷️ Marcas con '{marca_final.upper()}': " + ", ".join(sug_m[:10]))
-            except: pass
+        marca_final = st_searchbox(
+            search_function=buscar_marcas_supabase,
+            placeholder="Teclea para buscar o escribe una marca nueva...",
+            key="w_marca_searchbox"
+        )
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
-    st.markdown("<p style='color: #2bc443; font-weight: bold; margin-top: 10px; margin-bottom: 2px;'>Fila 2: Contenido Neto</p>", unsafe_allow_html=True)
     f2_c1, f2_c2 = st.columns(2)
     tam = f2_c1.number_input("Tamaño / Peso (Sube de 1 en 1 con + y -)", min_value=0.0, step=1.0, value=0.0, key="n_tam")
     uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
     
     # --- FILA 3: CLASIFICACIÓN COMERCIAL JERÁRQUICA ---
-    st.markdown("<p style='color: #2bc443; font-weight: bold; margin-top: 10px; margin-bottom: 2px;'>Fila 3: Ubicación en Catálogo</p>", unsafe_allow_html=True)
     f3_c1, f3_c2 = st.columns(2)
     categoria_sel = f3_c1.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key="n_cat")
     
@@ -123,8 +139,7 @@ with t2:
         if res_sub_filtradas.data: subcat_opciones += [s['nombre'] for s in res_sub_filtradas.data]
     subcategoria_sel = f3_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key="n_sub")
     
-    # --- FILA 4: SKU (CÓDIGO DE BARRAS) Y FOTO ---
-    st.markdown("<p style='color: #2bc443; font-weight: bold; margin-top: 10px; margin-bottom: 2px;'>Fila 4: Parámetros de Control</p>", unsafe_allow_html=True)
+    # --- FILA 4: SKU (CÓDIGO DE BARRAS) Y FOTO MULTIMEDIA ---
     f4_c1, f4_c2 = st.columns(2)
     barras = f4_c1.text_input("Código de Barras (SKU)", key="n_bar", value="", placeholder="Escribe o escanea el código...").strip()
     foto = f4_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
@@ -135,15 +150,17 @@ with t2:
     st.write("---")
     forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
 
+    # --- CAPA DE PROCESAMIENTO INTERNO EN EL BOTÓN ---
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         print(f"\n=== TERMINAL DE VERIFICACIÓN {VERSION_MODULO} ===")
-        print(f"-> Nombre en variable de trabajo: '{nombre_final}' | Marca: '{marca_final}'")
+        print(f"-> Variable Extraída Nombre: '{nombre_final}' | Marca: '{marca_final}'")
         
         if nombre_final and str(nombre_final).strip() != "":
             tipo_error, clon = validar_producto_existente(nombre_final, marca_final, barras, tam, uni)
             
             if tipo_error and not forzar_guardado:
-                st.error(f"🚨 CLON DETECTADO EN EL BOTÓN: Ya existe un registro para '{clon['nombre']}' marca '{clon['marca']}' de ({clon['tamano']} {clon['unidad']}).")
+                print(f"[CHECK {VERSION_MODULO}] Guardado detenido: Duplicado.")
+                st.error(f"🚨 CLON DETECTADO EN EL BOTÓN: Ya existe un registro para '{clon['nombre']}' marca '{clon['marca']}'.")
             else:
                 url_img = subir_a_storage(foto) if foto else None
                 id_cat_val = cat_dict[categoria_sel] if categoria_sel != "--- Seleccionar ---" else None
@@ -169,14 +186,18 @@ with t2:
                     "id_subcat": id_subcat_val
                 }
                 
+                print(f"[CHECK {VERSION_MODULO}] Enviando a base de datos: {paquete_datos}")
+
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
+                    print(f"[CHECK {VERSION_MODULO}] ¡Inserción completada!")
                     st.success(f"🎉 ¡Producto registrado exitosamente! (Procesado por Motor {VERSION_MODULO})")
                     st.rerun()
                 except Exception as servidor_error:
+                    print(f"[CHECK {VERSION_MODULO}] Error en servidor: {servidor_error}")
                     st.error(f"🚨 Supabase rechazó el registro debido al siguiente motivo: {servidor_error}")
         else:
-            st.warning("El campo 'Nombre del Producto' es obligatorio.")
+            st.warning("El campo 'Nombre del Producto' es obligatorio para poder procesar la carga.")
 
 # --- PESTAÑA 3: MODIFICAR / ELIMINAR ---
 with t3:
