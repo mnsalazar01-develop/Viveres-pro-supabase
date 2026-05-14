@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES SUB-NUMÉRICO MAESTRO ---
-VERSION_MODULO = "v3.2.1 - Extracción Secuencial Sólida"
+VERSION_MODULO = "v3.2.2 - Extracción Posicional Indexada"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -145,13 +145,13 @@ with t2:
                 url_img = subir_a_storage(foto) if foto else None
                 id_cat_val = cat_dict[categoria_sel] if categoria_sel != "--- Seleccionar ---" else None
                 
-                # --- CORRECCIÓN EXTRA EXTRACCIÓN SECUENCIAL v3.2.1 ---
+                # --- CORRECCIÓN INTEGRADA v3.2.2: EXTRACCIÓN POSICIONAL INDEXADA REAL ---
                 id_subcat_val = None
                 if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
                     try:
                         res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                         if res_id_sub.data and len(res_id_sub.data) > 0:
-                            # Acceso posicional por entero indexado plano 100% libre de errores de texto
+                            # Acceso posicional por entero indexado plano seguro
                             id_subcat_val = res_id_sub.data[0]['id_subcat']
                     except Exception as err_sub:
                         print(f"[CHECK {VERSION_MODULO}] Advertencia en mapeo de subcategoría: {err_sub}")
