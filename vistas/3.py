@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES SUB-NUMÉRICO MAESTRO ---
-VERSION_MODULO = "v3.2.4 - Sintaxis Multimedia Liberada"
+VERSION_MODULO = "v3.3.0 - Llenado Inteligente Dinámico"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,14 +12,14 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Desplegamos el título con su subnúmero de versión para control visual en el check
+# Desplegamos el título con su versión oficial para auditoría visual
 st.title("📦 Administración de Productos")
 st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 
-# 2. CARGA SEGURA DE DICCIONARIOS MAESTROS DESDE EL SERVIDOR
+# 2. CARGA SEGURA DE DICCIONARIOS MAESTROS DESDE EL SERVIDOR (Formato Lista de Diccionarios)
 try:
     res_p = supabase.table("productos").select("*").order("nombre").execute()
-    df_p = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame()
+    lista_productos_maestra = res_p.data if res_p.data else []
     
     res_c = supabase.table("categorias").select("*").order("id_cat").execute()
     cat_dict = {c['nombre']: c['id_cat'] for c in res_c.data} if res_c.data else {}
@@ -29,7 +29,7 @@ try:
     res_sc = supabase.table("subcategorias").select("*").order("nombre").execute()
     subcat_inv_dict = {sc['id_subcat']: sc['nombre'] for sc in res_sc.data} if res_sc.data else {}
 except:
-    df_p = pd.DataFrame()
+    lista_productos_maestra = []
     cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
 
 # --- FUNCIÓN PARA SUBIR IMÁGENES ---
@@ -42,7 +42,7 @@ def subir_a_storage(archivo):
         except: return None
     return None
 
-# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS (SINTAXIS CORREGIDA v3.2.4) ---
+# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS (BLINDADA CONTRA CONVERSIONES DE TEXTO CRUDAS) ---
 def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
     print(f"\n[CHECK {VERSION_MODULO}] Evaluando duplicados en Supabase...")
     if barras and str(barras).strip() != "":
@@ -51,21 +51,18 @@ def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir
         res_barras = query_barras.execute()
         if res_barras.data: return "barras", res_barras.data
 
-    query_textos = supabase.table("productos").select("*")
-    if id_excluir: query_textos = query_textos.neq("id_producto", id_excluir)
-    res_textos = query_textos.execute()
-    
-    if res_textos.data:
+    if lista_productos_maestra:
         nom_norm = "".join((nombre or "").lower().split())
         mar_norm = "".join((marca or "").lower().split())
         tam_norm = float(tamano if tamano is not None else 0)
         uni_norm = (unidad or "").lower()
         
-        for p in res_textos.data:
+        for p in lista_productos_maestra:
+            if id_excluir and p.get('id_producto') == id_excluir:
+                continue
             p_nom = "".join((p.get('nombre') or "").lower().split())
             p_mar = "".join((p.get('marca') or "").lower().split())
             p_tam = float(p.get('tamano') or 0)
-            # CORREGIDO: Paréntesis de cierre redondo alineado con el método .get() de Python
             p_uni = (p.get('unidad') or "").lower()
             
             if nom_norm == p_nom and mar_norm == p_mar and tam_norm == p_tam and uni_norm == p_uni:
@@ -77,34 +74,36 @@ t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar
 
 # --- PESTAÑA 1: VER CATÁLOGO ---
 with t1:
-    if not df_p.empty:
-        df_mostrar = df_p.copy()
-        if 'id_cat' in df_mostrar.columns: df_mostrar['categoria'] = df_mostrar['id_cat'].map(cat_inv_dict)
-        if 'id_subcat' in df_mostrar.columns: df_mostrar['subcategoria'] = df_mostrar['id_subcat'].map(subcat_inv_dict)
+    if lista_productos_maestra:
+        lista_tabla_limpia = []
+        for p in lista_productos_maestra:
+            lista_tabla_limpia.append({
+                "ID": p.get("id_producto"), "Nombre": p.get("nombre"), "Marca": p.get("marca") or "Sin Marca",
+                "Código Barras": p.get("codigo_barras") or "N/A", "Tamaño": p.get("tamano"), "Unidad": p.get("unidad"),
+                "Categoría": cat_inv_dict.get(p.get("id_cat"), "Sin Categoría"),
+                "Subcategoría": subcat_inv_dict.get(p.get("id_subcat"), "Sin Subcategoría"), "url_imagen": p.get("url_imagen") or ""
+            })
+        df_mostrar = pd.DataFrame(lista_tabla_limpia)
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
         
-# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO BLINDADO v3.2.4) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (LLENADO INTELIGENTE TIPO SCROLL v3.3.0) ---
 with t2:
     st.subheader("Formulario de Carga")
     
-    lista_nombres_existentes = sorted(list(set([p['nombre'] for p in res_p.data if p.get('nombre')]))) if res_p.data else []
-    lista_marcas_existentes = sorted(list(set([p['marca'] for p in res_p.data if p.get('marca') and p['marca'].strip() != ""]))) if res_p.data else []
+    lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
+    lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE Y MARCA (CAMPOS DE ESCRITURA LIBRE FIJA) ---
+    # --- FILA 1: NOMBRE Y MARCA (SCROLL INTELIGENTE COMPATIBLE CON TAB/ENTER) ---
     f1_c1, f1_c2 = st.columns(2)
     
-    with f1_c1:
-        nombre_final = st.text_input("Nombre del Producto*", key="n_nom_libre", placeholder="Escribe el nombre. Ej: Leche, Harina Pan")
-        if lista_nombres_existentes:
-            with st.expander("Ver nombres ya registrados en tu catálogo"):
-                st.caption(", ".join(lista_nombres_existentes))
-                
-    with f1_c2:
-        marca_final = st.text_input("Marca del Producto", key="n_mar_libre", placeholder="Escribe la marca. Ej: Vaaca, Diana")
-        if lista_marcas_existentes:
-            with st.expander("Ver marcas ya registradas en tu catálogo"):
-                st.caption(", ".join(lista_marcas_existentes))
+    # El usuario puede teclear letras libres; si es nuevo, el sistema crea dinámicamente la opción en caliente
+    nombre_raw = f1_c1.selectbox("🔍 Buscar o Registrar Nombre del Producto:", lista_nombres_existentes, index=None, placeholder="Teclea para buscar o registrar...", key="s_nom_box")
+    # Capturamos de forma segura el valor tecleado en caso de que sea nuevo
+    nombre_final = nombre_raw if nombre_raw else st.session_state.get("s_nom_box")
+
+    marca_raw = f1_c2.selectbox("🔍 Buscar o Registrar Marca:", lista_marcas_existentes, index=None, placeholder="Teclea para buscar o registrar...", key="s_mar_box")
+    marca_final = marca_raw if marca_raw else st.session_state.get("s_mar_box")
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
     f2_c1, f2_c2 = st.columns(2)
@@ -135,7 +134,7 @@ with t2:
 
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         print(f"\n=== INTERCEPCIÓN EN CONSOLA (Motor {VERSION_MODULO}) ===")
-        print(f"-> Nombre capturado: '{nombre_final}' | Marca: '{marca_final}'")
+        print(f"-> Nombre capturado del scroll: '{nombre_final}' | Marca: '{marca_final}'")
         
         if nombre_final and str(nombre_final).strip() != "":
             tipo_error, clon = validar_producto_existente(nombre_final, marca_final, barras, tam, uni)
@@ -152,21 +151,19 @@ with t2:
                     try:
                         res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                         if res_id_sub.data and len(res_id_sub.data) > 0:
-                            # Extracción indexada por enteros para listas posicionales nativas
-                            id_subcat_val = res_id_sub.data[0].get('id_subcat')
+                            # Extracción de diccionario segura por iteración de llave
+                            primer_nodo = res_id_sub.data[0]
+                            id_subcat_val = primer_nodo.get('id_subcat')
                     except Exception as err_sub:
                         print(f"[CHECK {VERSION_MODULO}] Advertencia en subcategoría: {err_sub}")
                         id_subcat_val = None
 
                 paquete_datos = {
-                    "nombre": nombre_final.strip(),
-                    "marca": marca_final.strip() if marca_final and str(marca_final).strip() != "" else None,
+                    "nombre": str(nombre_final).strip(),
+                    "marca": str(marca_final).strip() if marca_final and str(marca_final).strip() != "" else None,
                     "codigo_barras": barras if barras else None,
-                    "tamano": float(tam),
-                    "unidad": uni,
-                    "url_imagen": url_img,
-                    "id_cat": id_cat_val,
-                    "id_subcat": id_subcat_val
+                    "tamano": float(tam), "unidad": uni, "url_imagen": url_img,
+                    "id_cat": id_cat_val, "id_subcat": id_subcat_val
                 }
                 
                 print(f"[CHECK {VERSION_MODULO}] Enviando a Supabase: {paquete_datos}")
@@ -184,9 +181,9 @@ with t2:
 
 # --- PESTAÑA 3: MODIFICAR / ELIMINAR ---
 with t3:
-    if not df_p.empty:
+    if lista_productos_maestra:
         st.subheader("Gestión de un Producto Individual")
-        prod_dict_e = {f"{p['nombre']} - {p['marca'] or 'Sin Marca'} ({p['tamano'] or 0}{p['unidad'] or ''})": p for p in res_p.data}
+        prod_dict_e = {f"{p['nombre']} - {p['marca'] or 'Sin Marca'} ({p['tamano'] or 0}{p['unidad'] or ''})": p for p in lista_productos_maestra}
         sel_e = st.selectbox("Selecciona el producto específico que deseas modificar o eliminar:", list(prod_dict_e.keys()), key="s_e_p")
         p_e = prod_dict_e[sel_e]
         
@@ -237,4 +234,3 @@ with t3:
                 supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
                 st.warning("Producto eliminado de la base de datos."); st.rerun()
             except Exception as e: st.error(f"No se pudo elminar: {e}")
-    else: st.info("El catálogo está vacío.")
