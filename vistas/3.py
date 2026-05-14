@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES SUB-NUMÉRICO MAESTRO ---
-VERSION_MODULO = "v3.3.0 - Llenado Inteligente Dinámico"
+VERSION_MODULO = "v3.3.1 - Scroll Libre Nativo sin Borrado"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -16,7 +16,7 @@ supabase = st.session_state["supabase"]
 st.title("📦 Administración de Productos")
 st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 
-# 2. CARGA SEGURA DE DICCIONARIOS MAESTROS DESDE EL SERVIDOR (Formato Lista de Diccionarios)
+# 2. CARGA SEGURA DE DICCIONARIOS MAESTROS DESDE EL SERVIDOR
 try:
     res_p = supabase.table("productos").select("*").order("nombre").execute()
     lista_productos_maestra = res_p.data if res_p.data else []
@@ -42,7 +42,7 @@ def subir_a_storage(archivo):
         except: return None
     return None
 
-# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS (BLINDADA CONTRA CONVERSIONES DE TEXTO CRUDAS) ---
+# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS ---
 def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
     print(f"\n[CHECK {VERSION_MODULO}] Evaluando duplicados en Supabase...")
     if barras and str(barras).strip() != "":
@@ -87,23 +87,31 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
         
-# --- PESTAÑA 2: NUEVO PRODUCTO (LLENADO INTELIGENTE TIPO SCROLL v3.3.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE SCROLL LIBRE v3.3.1) ---
 with t2:
     st.subheader("Formulario de Carga")
     
+    # Extraemos las opciones existentes del catálogo
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE Y MARCA (SCROLL INTELIGENTE COMPATIBLE CON TAB/ENTER) ---
+    # --- FILA 1: NOMBRE Y MARCA (CAMPOS LIBRES CON AUTOCOMPLETADO DE NAVEGADOR) ---
     f1_c1, f1_c2 = st.columns(2)
     
-    # El usuario puede teclear letras libres; si es nuevo, el sistema crea dinámicamente la opción en caliente
-    nombre_raw = f1_c1.selectbox("🔍 Buscar o Registrar Nombre del Producto:", lista_nombres_existentes, index=None, placeholder="Teclea para buscar o registrar...", key="s_nom_box")
-    # Capturamos de forma segura el valor tecleado en caso de que sea nuevo
-    nombre_final = nombre_raw if nombre_raw else st.session_state.get("s_nom_box")
-
-    marca_raw = f1_c2.selectbox("🔍 Buscar o Registrar Marca:", lista_marcas_existentes, index=None, placeholder="Teclea para buscar o registrar...", key="s_mar_box")
-    marca_final = marca_raw if marca_raw else st.session_state.get("s_mar_box")
+    with f1_c1:
+        # Inyectamos una datalist HTML invisible para que el text_input se comporte como un scroll inteligente libre
+        html_nombres = "".join([f'<option value="{n}">' for n in lista_nombres_existentes])
+        st.markdown(f'<datalist id="lista_nombres">{html_nombres}</datalist>', unsafe_allow_html=True)
+        # Cuadro de texto que recibe el autocompletado pero no borra nada al dar TAB o ENTER
+        nombre_final = st.text_input("Nombre del Producto*", key="n_nom_libre", placeholder="Escribe o selecciona de la lista...")
+        st.markdown(f'<script>document.getElementsByName("n_nom_libre")[0].setAttribute("list", "lista_nombres");</script>', unsafe_allow_html=True)
+                
+    with f1_c2:
+        # Inyectamos la lista de marcas al autocompletado del segundo campo
+        html_marcas = "".join([f'<option value="{m}">' for m in lista_marcas_existentes])
+        st.markdown(f'<datalist id="lista_marcas">{html_marcas}</datalist>', unsafe_allow_html=True)
+        marca_final = st.text_input("Marca del Producto", key="n_mar_libre", placeholder="Escribe o selecciona la marca...")
+        st.markdown(f'<script>document.getElementsByName("n_mar_libre")[0].setAttribute("list", "lista_marcas");</script>', unsafe_allow_html=True)
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
     f2_c1, f2_c2 = st.columns(2)
@@ -130,7 +138,7 @@ with t2:
         f4_c2.image(foto, caption="Miniatura cargada", width=140)
 
     st.write("---")
-    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
+    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Ignorar alertas de similitud)", key="n_forzar")
 
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         print(f"\n=== INTERCEPCIÓN EN CONSOLA (Motor {VERSION_MODULO}) ===")
@@ -151,8 +159,7 @@ with t2:
                     try:
                         res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                         if res_id_sub.data and len(res_id_sub.data) > 0:
-                            # Extracción de diccionario segura por iteración de llave
-                            primer_nodo = res_id_sub.data[0]
+                            primer_nodo = res_id_sub.data
                             id_subcat_val = primer_nodo.get('id_subcat')
                     except Exception as err_sub:
                         print(f"[CHECK {VERSION_MODULO}] Advertencia en subcategoría: {err_sub}")
@@ -221,7 +228,7 @@ with t3:
                     try:
                         res_id_sub_e = supabase.table("subcategorias").select("id_subcat").eq("nombre", esub).eq("id_cat", v_c).execute()
                         if res_id_sub_e.data and len(res_id_sub_e.data) > 0:
-                            v_s = res_id_sub_e.data[0]['id_subcat']
+                            v_s = res_id_sub_e.data['id_subcat']
                     except: v_s = None
                         
                 try:
@@ -234,3 +241,4 @@ with t3:
                 supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
                 st.warning("Producto eliminado de la base de datos."); st.rerun()
             except Exception as e: st.error(f"No se pudo elminar: {e}")
+    else: st.info("El catálogo está vacío.")
