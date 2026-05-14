@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONTROL DE VERSIONES ARQUITECTURA POS ULTRA COMPACTA ---
-VERSION_MODULO = "v14.0.0 - Filtro Dinámico por Teclado POS"
+VERSION_MODULO = "v10.9.0 - Lógica de Inserción Garantizada"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,9 +12,9 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Cabecera oficial minimalista de la pantalla principal
+# Cabecera oficial minimalista
 st.title("📦 Administración de Productos")
-st.caption(f"Motor de Carga: **{VERSION_MODULO}**")
+st.caption(f"Motor: **{VERSION_MODULO}**")
 
 if "pos_form_counter" not in st.session_state:
     st.session_state["pos_form_counter"] = 0
@@ -38,23 +38,6 @@ except:
     lista_productos_maestra = []
     lista_subcat_maestra = []
     cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
-
-# --- ASISTENTE DE CONSULTA AUTOMÁTICO EN LA BARRA LATERAL (SIDEBAR) ---
-with st.sidebar:
-    st.markdown("### 🔍 Consultor de Existencias")
-    st.write("Teclee aquí para verificar qué productos o marcas ya tiene registrados en el sistema:")
-    termino_busqueda = st.text_input("Buscar en el catálogo...", placeholder="Ej: Harina, Aceite, Diana...").strip()
-    
-    if termino_busqueda and lista_productos_maestra:
-        coincidencias = [
-            {"Nombre": p['nombre'], "Marca": p['marca'] or "Sin Marca"}
-            for p in lista_productos_maestra
-            if termino_busqueda.lower() in p['nombre'].lower() or termino_busqueda.lower() in (p['marca'] or "").lower()
-        ]
-        if coincidencias:
-            st.dataframe(pd.DataFrame(coincidencias), use_container_width=True, hide_index=True)
-        else:
-            st.info("✨ Término libre: No se encontraron coincidencias. Puede registrarlo como nuevo.")
 
 # --- FUNCIÓN PARA SUBIR IMÁGENES ---
 def subir_a_storage(archivo):
@@ -109,14 +92,24 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (ENTRADA TOTALMENTE LIBRE v14.0.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (v10.9.0) ---
 with t2:
-    # --- FILA 1: NOMBRE Y MARCA LADO A LADO (CUADROS PASIVOS FIJOS) ---
+    lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
+    lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
+    
+    # --- FILA 1: NOMBRE Y MARCA LADO A LADO ---
+    st.markdown("### 🛒 Identificación del Vívere")
     f1_c1, f1_c2 = st.columns(2)
+    
     with f1_c1:
-        nombre_final = st.text_input("Nombre del Producto*", key=f"w_nombre_{f_idx}", placeholder="Digite el nombre final aquí...")
+        s_nom_lookup = f1_c1.selectbox("🔍 Buscar Nombre (Opcional):", ["➕ Es un Nombre Nuevo (Escríbelo abajo)"] + lista_nombres_existentes, key=f"lk_nom_{f_idx}")
+        val_inicial_nombre = "" if s_nom_lookup == "➕ Es un Nombre Nuevo (Escríbelo abajo)" else s_nom_lookup
+        nombre_final = f1_c1.text_input("Nombre del Producto*", value=val_inicial_nombre, key=f"w_nombre_{f_idx}", placeholder="Nombre...")
+        
     with f1_c2:
-        marca_final = st.text_input("Marca del Producto", key=f"w_marca_{f_idx}", placeholder="Digite la marca final aquí...")
+        s_mar_lookup = f1_c2.selectbox("🔍 Buscar Marca (Opcional):", ["➕ Es una Marca Nueva (Escríbela abajo)"] + lista_marcas_existentes, key=f"lk_mar_{f_idx}")
+        val_inicial_marca = "" if s_mar_lookup == "➕ Es una Marca Nueva (Escríbela abajo)" else s_mar_lookup
+        marca_final = f1_c2.text_input("Marca del Producto", value=val_inicial_marca, key=f"w_marca_{f_idx}", placeholder="Marca...")
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA LADO A LADO ---
     f2_c1, f2_c2 = st.columns(2)
