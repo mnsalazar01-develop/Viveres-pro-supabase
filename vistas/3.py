@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES ARQUITECTURA POS UNIFICADA ---
-VERSION_MODULO = "v12.1.0 - Motor POS Unificado en Primer Plano"
+# --- CONTROL DE VERSIONES ARQUITECTURA POS ULTRA COMPACTA ---
+VERSION_MODULO = "v14.0.0 - Filtro Dinámico por Teclado POS"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,9 +12,9 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Cabecera oficial minimalista
+# Cabecera oficial minimalista de la pantalla principal
 st.title("📦 Administración de Productos")
-st.caption(f"Motor: **{VERSION_MODULO}**")
+st.caption(f"Motor de Carga: **{VERSION_MODULO}**")
 
 if "pos_form_counter" not in st.session_state:
     st.session_state["pos_form_counter"] = 0
@@ -38,6 +38,23 @@ except:
     lista_productos_maestra = []
     lista_subcat_maestra = []
     cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
+
+# --- ASISTENTE DE CONSULTA AUTOMÁTICO EN LA BARRA LATERAL (SIDEBAR) ---
+with st.sidebar:
+    st.markdown("### 🔍 Consultor de Existencias")
+    st.write("Teclee aquí para verificar qué productos o marcas ya tiene registrados en el sistema:")
+    termino_busqueda = st.text_input("Buscar en el catálogo...", placeholder="Ej: Harina, Aceite, Diana...").strip()
+    
+    if termino_busqueda and lista_productos_maestra:
+        coincidencias = [
+            {"Nombre": p['nombre'], "Marca": p['marca'] or "Sin Marca"}
+            for p in lista_productos_maestra
+            if termino_busqueda.lower() in p['nombre'].lower() or termino_busqueda.lower() in (p['marca'] or "").lower()
+        ]
+        if coincidencias:
+            st.dataframe(pd.DataFrame(coincidencias), use_container_width=True, hide_index=True)
+        else:
+            st.info("✨ Término libre: No se encontraron coincidencias. Puede registrarlo como nuevo.")
 
 # --- FUNCIÓN PARA SUBIR IMÁGENES ---
 def subir_a_storage(archivo):
@@ -92,32 +109,14 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (UNIFICADO EN PRIMER PLANO v12.1.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (ENTRADA TOTALMENTE LIBRE v14.0.0) ---
 with t2:
-    lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
-    lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
-    
-    # --- FILA 1: NOMBRE Y MARCA (UN SOLO CAMPO INTELIGENTE POR ATRIBUTO) ---
+    # --- FILA 1: NOMBRE Y MARCA LADO A LADO (CUADROS PASIVOS FIJOS) ---
     f1_c1, f1_c2 = st.columns(2)
-    
     with f1_c1:
-        # Control único de primer plano: autocompleta con un clic, y si es nuevo retiene el texto al dar TAB
-        nombre_final = st.selectbox(
-            "Nombre del Producto*", 
-            options=lista_nombres_existentes, 
-            index=None, 
-            placeholder="Escribe o busca el nombre aquí...", 
-            key=f"w_nombre_{f_idx}"
-        )
-        
+        nombre_final = st.text_input("Nombre del Producto*", key=f"w_nombre_{f_idx}", placeholder="Digite el nombre final aquí...")
     with f1_c2:
-        marca_final = st.selectbox(
-            "Marca del Producto", 
-            options=lista_marcas_existentes, 
-            index=None, 
-            placeholder="Escribe o busca la marca aquí...", 
-            key=f"w_marca_{f_idx}"
-        )
+        marca_final = st.text_input("Marca del Producto", key=f"w_marca_{f_idx}", placeholder="Digite la marca final aquí...")
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA LADO A LADO ---
     f2_c1, f2_c2 = st.columns(2)
@@ -134,7 +133,7 @@ with t2:
             subcat_opciones += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_actual]
     subcategoria_sel = f3_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key=f"n_sub_{f_idx}")
     
-    # --- FILA 4: SKU Y FOTO ---
+    # --- FILA 4: SKU Y FOTO LADO A LADO ---
     f4_c1, f4_c2 = st.columns(2)
     barras = f4_c1.text_input("Código de Barras (SKU)", key=f"n_bar_{f_idx}", value="", placeholder="Código de barras...").strip()
     foto = f4_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key=f"n_foto_{f_idx}")
@@ -142,7 +141,7 @@ with t2:
     if foto:
         st.image(foto, caption="Miniatura", width=140)
 
-    # --- FILA 5: BOTÓN Y CHECKBOX ---
+    # --- FILA 5: BOTÓN Y CHECKBOX UNIFICADOS ---
     fc1, fc2 = st.columns(2)
     forzar_guardado = fc1.checkbox("⚠️ Forzar registro", key=f"n_forzar_{f_idx}")
     guardar_btn = fc2.button("🚀 Guardar Producto en Catálogo", type="primary", use_container_width=True)
