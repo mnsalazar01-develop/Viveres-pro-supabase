@@ -1,10 +1,11 @@
 import streamlit as st
 from supabase import create_client
+import os
 
-# 1. CONFIGURACIÓN ESTRÉSTICA DE ARRANQUE GLOBAL
+# 1. CONFIGURACIÓN GLOBAL FORZADA DE LA APP (Línea de arranque obligatoria)
 st.set_page_config(page_title="Control Víveres Pro v3.0", layout="wide", page_icon="🛒")
 
-# 2. CONEXIÓN UNIFICADA COMPARTIDA A SUPABASE
+# 2. CONEXIÓN MAESTRA CENTRALIZADA A SUPABASE
 @st.cache_resource
 def init_connection():
     try:
@@ -12,16 +13,16 @@ def init_connection():
         key = st.secrets["SUPABASE_KEY"]
         return create_client(url, key)
     except Exception as e:
-        st.error(f"Error crítico de configuración en los Secrets de la App: {e}")
+        st.error(f"Falta configurar las llaves en los Secrets de Streamlit: {e}")
         st.stop()
 
-# Inyectamos el motor de la base de datos en el estado global compartido de Streamlit
+# Inicializamos y blindamos la conexión en el Session State global
 if "supabase" not in st.session_state:
     st.session_state["supabase"] = init_connection()
 
-# 3. ENRUTADOR MODULAR FLUIDO (Nombres limpios sin caracteres especiales para Python 3.14+)
+# 3. ENRUTADOR MODULAR SECUENCIAL (Elimina el error de índices de texto)
 st.sidebar.title("🛒 Control Víveres")
-st.sidebar.caption("Estructura Modular Sólida v3.0")
+st.sidebar.caption("Versión 3.0 Modular Sólida")
 
 try:
     pg = st.navigation([
@@ -34,7 +35,7 @@ try:
     ])
     pg.run()
 except Exception as e:
-    st.title("🛒 Control Víveres Pro v3.0")
-    st.warning("⚠️ Sincronizando módulos con el repositorio de GitHub...")
-    with st.expander("Detalles de inicialización del servidor"):
-        st.code(f"Error de mapeo modular: {e}")
+    st.title("🛒 Bienvenidos a Control Víveres Pro v3.0")
+    st.warning("⚠️ El sistema modular se está sincronizando con tu repositorio de GitHub.")
+    with st.expander("Detalles técnicos del arranque"):
+        st.code(f"Ruta actual del servidor: {os.getcwd()}\nError de mapeo: {e}")
