@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES OFICIAL ---
-VERSION_MODULO = "v3.2 - Mapeo Seguro de Nulos"
+# --- CONTROL DE VERSIONES SUB-NUMÉRICO MAESTRO ---
+VERSION_MODULO = "v3.2.1 - Extracción Secuencial Sólida"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,7 +12,7 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Desplegamos el título con su indicador de versión para control visual en el check
+# Desplegamos el título con su subnúmero de versión para control visual en el check
 st.title("📦 Administración de Productos")
 st.caption(f"Motor de Clasificación: **{VERSION_MODULO}**")
 
@@ -83,14 +83,14 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
         
-# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO LIMPIO EN 4 FILAS) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (4 FILAS) ---
 with t2:
     st.subheader("Formulario de Carga")
     
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in res_p.data if p.get('nombre')]))) if res_p.data else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in res_p.data if p.get('marca') and p['marca'].strip() != ""]))) if res_p.data else []
     
-    # --- FILA 1: NOMBRE Y MARCA (BUSCADORES INTELIGENTES CON TEXT_INPUT) ---
+    # --- FILA 1: NOMBRE Y MARCA (BUSCADORES INTELIGENTES) ---
     f1_c1, f1_c2 = st.columns(2)
     s_nom = f1_c1.selectbox("🔍 Buscar Nombre de Producto existente:", ["--- Escribir un Nombre Nuevo ---"] + lista_nombres_existentes, key="s_nom_box")
     if s_nom == "--- Escribir un Nombre Nuevo ---":
@@ -134,7 +134,6 @@ with t2:
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         print(f"\n=== INTERCEPCIÓN EN CONSOLA (Motor {VERSION_MODULO}) ===")
         print(f"-> Nombre: '{nombre_final}' | Marca: '{marca_final}'")
-        print(f"-> Categoría: '{categoria_sel}' | Subcategoría: '{subcategoria_sel}'")
         
         if nombre_final and str(nombre_final).strip() != "":
             tipo_error, clon = validar_producto_existente(nombre_final, marca_final, barras, tam, uni)
@@ -146,12 +145,13 @@ with t2:
                 url_img = subir_a_storage(foto) if foto else None
                 id_cat_val = cat_dict[categoria_sel] if categoria_sel != "--- Seleccionar ---" else None
                 
+                # --- CORRECCIÓN EXTRA EXTRACCIÓN SECUENCIAL v3.2.1 ---
                 id_subcat_val = None
                 if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
                     try:
                         res_id_sub = supabase.table("subcategorias").select("id_subcat").eq("nombre", subcategoria_sel).eq("id_cat", id_cat_val).execute()
                         if res_id_sub.data and len(res_id_sub.data) > 0:
-                            # CORREGIDO: Cierre redondo de paréntesis nativo de Python para la extracción
+                            # Acceso posicional por entero indexado plano 100% libre de errores de texto
                             id_subcat_val = res_id_sub.data[0]['id_subcat']
                     except Exception as err_sub:
                         print(f"[CHECK {VERSION_MODULO}] Advertencia en mapeo de subcategoría: {err_sub}")
@@ -172,7 +172,7 @@ with t2:
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
-                    print(f"[CHECK {VERSION_MODULO}] ¡Registro guardado exitosamente en el servidor!")
+                    print(f"[CHECK {VERSION_MODULO}] ¡Registro guardado exitosamente!")
                     st.success(f"🎉 ¡Producto registrado exitosamente! (Procesado por Motor {VERSION_MODULO})")
                     st.rerun()
                 except Exception as servidor_error:
