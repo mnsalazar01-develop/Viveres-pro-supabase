@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES ARQUITECTURA DEFINTIVA POS ---
-VERSION_MODULO = "v11.0.0 - Entrada Única Integrada POS"
+# --- CONTROL DE VERSIONES ARQUITECTURA POS ULTRA COMPACTA ---
+VERSION_MODULO = "v10.9.0 - Lógica de Inserción Garantizada"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -92,44 +92,31 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (CAPA UNIFICADA INMUNE A BORRADOS v11.0.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (v10.9.0) ---
 with t2:
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
     
-    # --- FILA 1: NOMBRE Y MARCA (CAMPOS DE ENTRADA TOTALMENTE LIBRES) ---
+    # --- FILA 1: NOMBRE Y MARCA LADO A LADO ---
+    st.markdown("### 🛒 Identificación del Vívere")
     f1_c1, f1_c2 = st.columns(2)
     
     with f1_c1:
-        # Tu caja única inteligente para el Nombre: recibe texto libre y jamás se limpia sola
-        nombre_final = st.text_input("Nombre del Producto*", key=f"w_nombre_{f_idx}", placeholder="Escribe el nombre aquí...")
+        s_nom_lookup = f1_c1.selectbox("🔍 Buscar Nombre (Opcional):", ["➕ Es un Nombre Nuevo (Escríbelo abajo)"] + lista_nombres_existentes, key=f"lk_nom_{f_idx}")
+        val_inicial_nombre = "" if s_nom_lookup == "➕ Es un Nombre Nuevo (Escríbelo abajo)" else s_nom_lookup
+        nombre_final = f1_c1.text_input("Nombre del Producto*", value=val_inicial_nombre, key=f"w_nombre_{f_idx}", placeholder="Nombre...")
         
-        # Inteligencia Predictiva No Invasiva: Si escribes y hay coincidencia, despliega un autocompletador opcional
-        if nombre_final and lista_nombres_existentes:
-            coincidencias_n = [n for n in lista_nombres_existentes if nombre_final.lower() in n.lower()]
-            if coincidencias_n:
-                # Si el usuario hace clic en el selectbox de abajo, reescribe el campo con el nombre exacto
-                s_nom_select = st.selectbox("💡 Sugerencias encontradas (Haz clic para usar):", ["--- Mantener mi texto tipeado ---"] + coincidencias_n, key=f"sug_n_{f_idx}")
-                if s_nom_select != "--- Mantener mi texto tipeado ---":
-                    nombre_final = s_nom_select
-
     with f1_c2:
-        # Tu caja única inteligente para la Marca
-        marca_final = st.text_input("Marca del Producto", key=f"w_marca_{f_idx}", placeholder="Escribe la marca aquí...")
-        
-        if marca_final and lista_marcas_existentes:
-            coincidencias_m = [m for m in lista_marcas_existentes if marca_final.lower() in m.lower()]
-            if coincidencias_m:
-                s_mar_select = st.selectbox("💡 Marcas encontradas (Haz clic para usar):", ["--- Mantener mi marca tipeada ---"] + coincidencias_m, key=f"sug_m_{f_idx}")
-                if s_mar_select != "--- Mantener mi marca tipeada ---":
-                    marca_final = s_mar_select
+        s_mar_lookup = f1_c2.selectbox("🔍 Buscar Marca (Opcional):", ["➕ Es una Marca Nueva (Escríbela abajo)"] + lista_marcas_existentes, key=f"lk_mar_{f_idx}")
+        val_inicial_marca = "" if s_mar_lookup == "➕ Es una Marca Nueva (Escríbela abajo)" else s_mar_lookup
+        marca_final = f1_c2.text_input("Marca del Producto", value=val_inicial_marca, key=f"w_marca_{f_idx}", placeholder="Marca...")
 
-    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
+    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA LADO A LADO ---
     f2_c1, f2_c2 = st.columns(2)
-    tam = f2_c1.number_input("Tamaño / Peso (Caja vacía)", min_value=0.0, step=1.0, key=f"n_tam_{f_idx}", value=None, placeholder="Ej: 500, 250, 1")
+    tam = f2_c1.number_input("Tamaño / Peso (Vacio)", min_value=0.0, step=1.0, key=f"n_tam_{f_idx}", value=None, placeholder="Ej: 500, 250, 1")
     uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key=f"n_uni_{f_idx}")
     
-    # --- FILA 3: CATEGORÍA Y SUBCATEGORÍA ---
+    # --- FILA 3: CATEGORÍA Y SUBCATEGORÍA LADO A LADO ---
     f3_c1, f3_c2 = st.columns(2)
     categoria_sel = f3_c1.selectbox("Categoría Principal", ["--- Seleccionar ---"] + lista_cat, key=f"n_cat_{f_idx}")
     subcat_opciones = ["--- Seleccionar ---"]
@@ -139,7 +126,7 @@ with t2:
             subcat_opciones += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_actual]
     subcategoria_sel = f3_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key=f"n_sub_{f_idx}")
     
-    # --- FILA 4: SKU Y FOTO MULTIMEDIA ---
+    # --- FILA 4: SKU Y FOTO LADO A LADO ---
     f4_c1, f4_c2 = st.columns(2)
     barras = f4_c1.text_input("Código de Barras (SKU)", key=f"n_bar_{f_idx}", value="", placeholder="Código de barras...").strip()
     foto = f4_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key=f"n_foto_{f_idx}")
@@ -147,7 +134,7 @@ with t2:
     if foto:
         st.image(foto, caption="Miniatura", width=140)
 
-    # --- FILA 5: BOTÓN Y CHECKBOX ---
+    # --- FILA 5: BOTÓN Y CHECKBOX UNIFICADOS ---
     fc1, fc2 = st.columns(2)
     forzar_guardado = fc1.checkbox("⚠️ Forzar registro", key=f"n_forzar_{f_idx}")
     guardar_btn = fc2.button("🚀 Guardar Producto en Catálogo", type="primary", use_container_width=True)
