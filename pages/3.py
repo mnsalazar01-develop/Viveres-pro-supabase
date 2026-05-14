@@ -74,59 +74,51 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
         
-# --- PESTAÑA 2: NUEVO PRODUCTO (NUEVO DISEÑO ESTRUCTURADO) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (DISEÑO ÁGIL CORREGIDO) ---
 with t2:
     st.subheader("Formulario de Carga")
     
     lista_nombres_existentes = sorted(list(set([p['nombre'] for p in res_p.data if p.get('nombre')]))) if res_p.data else []
     lista_marcas_existentes = sorted(list(set([p['marca'] for p in res_p.data if p.get('marca') and p['marca'].strip() != ""]))) if res_p.data else []
     
-    # --- FILA 1: NOMBRE Y MARCA (CON BUSCADOR INDEPENDIENTE) ---
-    f1_c1, f1_c2 = st.columns(2)
-    s_nom = f1_c1.selectbox("🔍 Buscar Nombre de Producto existente:", ["--- Escribir un Nombre Nuevo ---"] + lista_nombres_existentes, key="s_nom_box")
+    c1, c2 = st.columns(2)
+    
+    s_nom = c1.selectbox("🔍 Buscar Nombre de Producto existente:", ["--- Escribir un Nombre Nuevo ---"] + lista_nombres_existentes, key="s_nom_box")
     if s_nom == "--- Escribir un Nombre Nuevo ---":
-        nombre = f1_c1.text_input("Digita el Nombre del Nuevo Producto*", key="n_nom_input", placeholder="Ej: Arroz, Detergente, Leche")
+        nombre = c1.text_input("Digita el Nombre del Nuevo Producto*", key="n_nom_input", placeholder="Ej: Arroz, Detergente, Leche")
     else:
         nombre = s_nom
+        c1.info(f"Seleccionado: **{nombre}**")
         
-    s_mar = f1_c2.selectbox("🔍 Buscar Marca existente:", ["--- Escribir una Marca Nueva ---"] + lista_marcas_existentes, key="s_mar_box")
+    s_mar = c2.selectbox("🔍 Buscar Marca existente:", ["--- Escribir una Marca Nueva ---"] + lista_marcas_existentes, key="s_mar_box")
     if s_mar == "--- Escribir una Marca Nueva ---":
-        marca = f1_c2.text_input("Digita la Marca*", key="n_mar_input", placeholder="Ej: Diana, Vaaca, Las Llaves")
+        marca = c2.text_input("Digita la Marca*", key="n_mar_input", placeholder="Ej: Diana, Vaaca, Las Llaves")
     else:
         marca = s_mar
-
-    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA ---
-    f2_c1, f2_c2 = st.columns(2)
-    # Iniciamos en 0.0 para que el contador de + y - esté completamente activo desde el inicio
-    tam = f2_c1.number_input("Tamaño / Peso (Sube de 1 en 1)", min_value=0.0, step=1.0, value=0.0, key="n_tam")
-    uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
-    
-    # --- FILA 3: CÓDIGO DE BARRAS Y FOTO DEL PRODUCTO ---
-    f3_c1, f3_c2 = st.columns(2)
-    barras = f3_c1.text_input("Código de Barras", key="n_bar", placeholder="Escribe o escanea el código").strip()
-    foto = f3_c2.file_uploader("Foto del Producto (WebP, JPG, PNG)", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
-    
-    # VISOR MULTIMEDIA EN PANTALLA: Muestra la foto inmediatamente al ser cargada
-    if foto:
-        f3_c2.image(foto, caption="Vista previa de la imagen cargada", width=250)
+        c2.info(f"Seleccionado: **{marca}**")
 
     st.write("---")
-    # --- FILA FINAL: SELECTORES DE CATEGORÍAS ---
-    f4_c1, f4_c2 = st.columns(2)
-    categoria_sel = f4_c1.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key="n_cat")
+    c3, c4 = st.columns(2)
+    barras = c3.text_input("Código de Barras", key="n_bar").strip()
+    
+    tam = c4.number_input("Tamaño / Peso (Contador Entero)", min_value=0.0, step=1.0, value=None, key="n_tam", placeholder="Digita o usa + y -")
+    uni = c3.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key="n_uni")
+    foto = c4.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key="n_foto")
+    
+    categoria_sel = c3.selectbox("Categoría Principal (Orden Numérico)", ["--- Seleccionar ---"] + lista_cat, key="n_cat")
     
     subcat_opciones = ["--- Seleccionar ---"]
     if categoria_sel != "--- Seleccionar ---":
         id_cat_actual = cat_dict[categoria_sel]
         res_sub_filtradas = supabase.table("subcategorias").select("*").eq("id_cat", id_cat_actual).order("nombre").execute()
         if res_sub_filtradas.data: subcat_opciones += [s['nombre'] for s in res_sub_filtradas.data]
-    subcategoria_sel = f4_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key="n_sub")
+    subcategoria_sel = c4.selectbox("Subcategoría (Reactiva)", subcat_opciones, key="n_sub")
     
-    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Omitir alertas de similitud)", key="n_forzar")
+    forzar_guardado = st.checkbox("⚠️ Forzar el registro (Ignorar alertas de similitud)", key="n_forzar")
 
     if st.button("🚀 Guardar Producto en Catálogo", type="primary"):
         if nombre:
-            # CORREGIDO: Se invocan los 5 argumentos correspondientes (incluyendo el código de barras)
+            # CORREGIDO: Se inyectan los 5 argumentos requeridos por la firma de la función
             tipo_error, clon = validar_producto_existente(nombre, marca, barras, tam, uni)
             
             if tipo_error and not forzar_guardado:
@@ -152,7 +144,8 @@ with t2:
                     st.success("🎉 ¡Producto registrado exitosamente en el catálogo maestro!")
                     st.rerun()
                 except Exception as servidor_error:
-                    st.error(f"🚨 Supabase rechazó el registro debido al siguiente motivo: {servidor_error}")
+                    st.error("🚨 Supabase rechazó el registro debido al siguiente motivo:")
+                    st.info(f"**Mensaje del Servidor:** {servidor_error}")
 
         else: st.warning("El campo 'Nombre' es obligatorio para poder procesar la carga.")
 
@@ -188,6 +181,7 @@ with t3:
         b_del, b_upd = st.columns(2)
         
         if b_upd.button("💾 Guardar Cambios del Producto", type="primary"):
+            # CORREGIDO AQUÍ TAMBIÉN: Agregada la variable barras 'eb' para consistencia en la capa de edición
             err, clon = validar_producto_existente(en, em, eb, et, eu, id_excluir=p_e['id_producto'])
             if err and not f_ed: st.error(f"🚨 DUPLICADO: Conflicto con {clon['nombre']}")
             else:
