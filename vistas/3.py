@@ -1,46 +1,239 @@
-import tkinter as tk
-from tkinter import ttk
+import streamlit as st
+import pandas as pd
+from datetime import datetime
 
-# Tu arreglo estático acotado en la memoria RAM del equipo
-arreglo_100_nombres = ["Aceite Vegetal", "Arroz Blanco", "Azúcar Refinada", "Harina Pan", "Mayonesa Mavesa"]
+# --- CONTROL DE VERSIONES ARQUITECTURA DATA_EDITOR PRO ---
+VERSION_MODULO = "v15.0.0 - Celda de Inserción Inmune al TAB"
 
-def filtrar_nombres_teclado(event):
-    """
-    Se ejecuta letra por letra. Captura lo tipeado, busca coincidencias 
-    en el arreglo y despliega el scroll nativo sin borrar tu texto.
-    """
-    # 1. Capturamos el texto crudo de la Caja de Trabajo en el primer plano
-    texto_tipeado = combo_nombre.get()
+# 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
+if "supabase" not in st.session_state:
+    st.error("Conexión central no encontrada. Por favor, regresa al inicio de la aplicación.")
+    st.stop()
+
+supabase = st.session_state["supabase"]
+
+# Cabecera oficial minimalista de la pantalla principal
+st.title("📦 Administración de Productos")
+st.caption(f"Motor de Carga: **{VERSION_MODULO}**")
+
+# Inicializamos el contador de reseteo del formulario si no existe
+if "pos_form_counter" not in st.session_state:
+    st.session_state["pos_form_counter"] = 0
+
+f_idx = st.session_state["pos_form_counter"]
+
+# 2. CARGA DE BASE DE DATOS MAESTRA (LIMITADO A TU REGLA DE 100 REGISTROS MAESTROS)
+try:
+    res_p = supabase.table("productos").select("*").order("nombre").limit(100).execute()
+    lista_productos_maestra = res_p.data if res_p.data else []
     
-    # Si la caja está vacía, restablecemos las 100 opciones originales
-    if texto_tipeado == "":
-        combo_nombre['values'] = arreglo_100_nombres
-    else:
-        # 2. Filtramos el arreglo de control en microsegundos
-        coincidencias = []
-        for nombre in arreglo_100_nombres:
-            if texto_tipeado.lower() in nombre.lower():
-                coincidencias.append(nombre)
+    res_c = supabase.table("categorias").select("*").order("id_cat").execute()
+    cat_dict = {c['nombre']: c['id_cat'] for c in res_c.data} if res_c.data else {}
+    cat_inv_dict = {c['id_cat']: c['nombre'] for c in res_c.data} if res_c.data else {}
+    lista_cat = [c['nombre'] for c in res_c.data] if res_c.data else []
+
+    res_sc = supabase.table("subcategorias").select("*").order("nombre").execute()
+    lista_subcat_maestra = res_sc.data if res_sc.data else []
+    subcat_inv_dict = {sc['id_subcat']: sc['nombre'] for sc in res_sc.data} if res_sc.data else {}
+except:
+    lista_productos_maestra = []
+    lista_subcat_maestra = []
+    cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
+
+# Vectores ordenados para las sugerencias del autocompletado
+lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')])))
+lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""])))
+
+# --- FUNCIÓN PARA SUBIR IMÁGENES ---
+def subir_a_storage(archivo):
+    if archivo:
+        try:
+            nombre_archivo = f"img_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name.replace(' ', '_')}"
+            supabase.storage.from_("imagenes").upload(path=nombre_archivo, file=archivo.getvalue(), file_options={"content-type": archivo.type})
+            return supabase.storage.from_("imagenes").get_public_url(nombre_archivo)
+        except: return None
+    return None
+
+# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS ---
+def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
+    if barras and str(barras).strip() != "":
+        res_barras = supabase.table("productos").select("*").eq("codigo_barras", barras).execute()
+        if res_barras.data:
+            if id_excluir and res_barras.data.get('id_producto') == id_excluir: pass
+            else: return "barras", res_barras.data
+
+    if lista_productos_maestra and nombre and str(nombre).strip() != "":
+        nom_norm = "".join(str(nombre).lower().split())
+        mar_norm = "".join(str(marca or "").lower().split())
+        tam_norm = float(tamano if tamano is not None else 0)
+        uni_norm = str(unidad or "").lower()
         
-        # 3. Inyectamos las sugerencias filtradas al desplegable
-        combo_nombre['values'] = coincidencias
+        for p in lista_productos_maestra:
+            if id_excluir and p.get('id_producto') == id_excluir: continue
+            p_nom = "".join(str(p.get('nombre') or "").lower().split())
+            p_mar = "".join(str(p.get('marca') or "").lower().split())
+            p_tam = float(p.get('tamano') or 0)
+            p_uni = str(p.get('unidad') or "").lower()
+            
+            if nom_norm == p_nom and mar_norm == p_mar and tam_norm == p_tam and uni_norm == p_uni:
+                return "atributos", p
+    return None, None
+
+# 3. INTERFAZ ORGANIZADA POR PESTAÑAS HOMOLOGADAS
+t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar/Borrar"])
+
+# --- PESTAÑA 1: VER CATÁLOGO ---
+with t1:
+    if lista_productos_maestra:
+        lista_tabla_limpia = []
+        for p in lista_productos_maestra:
+            lista_tabla_limpia.append({
+                "ID": p.get("id_producto"), "Nombre": p.get("nombre"), "Marca": p.get("marca") or "Sin Marca",
+                "Código Barras": p.get("codigo_barras") or "N/A", "Tamaño": p.get("tamano"), "Unidad": p.get("unidad"),
+                "Categoría": cat_inv_dict.get(p.get("id_cat"), "Sin Categoría"),
+                "Subcategoría": subcat_inv_dict.get(p.get("id_subcat"), "Sin Subcategoría"), "url_imagen": p.get("url_imagen") or ""
+            })
+        df_mostrar = pd.DataFrame(lista_tabla_limpia)
+        st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
+    else: st.info("El catálogo de productos está vacío.")
+
+# --- PESTAÑA 2: NUEVO PRODUCTO (ARQUITECTURA DE INSERCIÓN INMUNE AL TAB v15.0.0) ---
+with t2:
+    st.subheader("Formulario de Carga Ágil")
+    
+    # --- FILA 1: NOMBRE Y MARCA DENTRO DE CELDA INTERACTIVA INMUNE A BORRADOS ---
+    st.markdown("### 🛒 Identificación del Vívere")
+    
+    # Construimos la matriz limpia para que el editor dibuje los dos campos en primer plano
+    df_registro_actual = pd.DataFrame([{"Nombre del Producto*": "", "Marca del Producto": ""}])
+    
+    # El data_editor inyecta sugerencias pero congela textos nuevos de forma nativa al dar TAB o ENTER
+    editado = st.data_editor(
+        df_registro_actual,
+        column_config={
+            "Nombre del Producto*": st.column_config.SelectboxColumn(options=lista_nombres_existentes, required=True, width="large"),
+            "Marca del Producto": st.column_config.SelectboxColumn(options=lista_marcas_existentes, width="large")
+        },
+        hide_index=True,
+        use_container_width=True,
+        key=f"pos_editor_{f_idx}"
+    )
+    
+    # Extraemos de forma segura los valores congelados en la celda
+    nombre_final = editado.iloc[0]["Nombre del Producto*"]
+    marca_final = editado.iloc[0]["Marca del Producto"]
+
+    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA LADO A LADO ---
+    f2_c1, f2_c2 = st.columns(2)
+    tam = f2_c1.number_input("Tamaño / Peso (Vacio)", min_value=0.0, step=1.0, key=f"n_tam_{f_idx}", value=None, placeholder="Ej: 500, 250, 1")
+    uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key=f"n_uni_{f_idx}")
+    
+    # --- FILA 3: CATEGORÍA Y SUBCATEGORÍA LADO A LADO ---
+    f3_c1, f3_c2 = st.columns(2)
+    categoria_sel = f3_c1.selectbox("Categoría Principal", ["--- Seleccionar ---"] + lista_cat, key=f"n_cat_{f_idx}")
+    subcat_opciones = ["--- Seleccionar ---"]
+    if categoria_sel != "--- Seleccionar ---":
+        id_cat_actual = cat_dict.get(categoria_sel)
+        if id_cat_actual is not None:
+            subcat_opciones += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_actual]
+    subcategoria_sel = f3_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key=f"n_sub_{f_idx}")
+    
+    # --- FILA 4: SKU Y FOTO ---
+    f4_c1, f4_c2 = st.columns(2)
+    barras = f4_c1.text_input("Código de Barras (SKU)", key=f"n_bar_{f_idx}", value="", placeholder="Código de barras...").strip()
+    foto = f4_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key=f"n_foto_{f_idx}")
+    
+    if foto:
+        st.image(foto, caption="Miniatura", width=140)
+
+    # --- FILA 5: BOTÓN Y CHECKBOX UNIFICADOS ---
+    fc1, fc2 = st.columns(2)
+    forzar_guardado = fc1.checkbox("⚠️ Forzar registro", key=f"n_forzar_{f_idx}")
+    guardar_btn = fc2.button("🚀 Guardar Producto en Catálogo", type="primary", use_container_width=True)
+
+    if guardar_btn:
+        str_nombre = str(nombre_final).strip() if nombre_final else ""
+        str_marca = str(marca_final).strip() if marca_final else ""
+        float_tam = float(tam) if tam is not None else 0.0
         
-        # Si hay opciones válidas, abrimos el scroll flotante de forma automática
-        if coincidencias:
-            combo_nombre.event_generate("<Down>")
+        if str_nombre != "":
+            tipo_error, clon = validar_producto_existente(str_nombre, str_marca, barras, float_tam, uni)
+            if tipo_error and not forzar_guardado:
+                st.error(f"🚨 CLON: Ya existe '{clon['nombre']}' marca '{clon['marca']}'.")
+            else:
+                url_img = subir_a_storage(foto) if foto else None
+                id_cat_val = cat_dict.get(categoria_sel) if categoria_sel != "--- Seleccionar ---" else None
+                id_subcat_val = None
+                if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
+                    for sc in lista_subcat_maestra:
+                        if sc.get('nombre') == subcategoria_sel and sc.get('id_cat') == id_cat_val:
+                            id_subcat_val = sc.get('id_subcat')
+                            break
 
-# --- CONFIGURACIÓN DEL WIDGET EN LA VENTANA ---
-ventana = tk.Tk()
-ventana.geometry("400x200")
-ventana.configure(bg="#1e1e1e")
+                paquete_datos = {
+                    "nombre": str_nombre, "marca": str_marca if str_marca != "" else None, "codigo_barras": barras if barras else None,
+                    "tamano": float_tam, "unidad": uni, "url_imagen": url_img, "id_cat": id_cat_val, "id_subcat": id_subcat_val
+                }
 
-combo_nombre = ttk.Combobox(ventana, width=40)
-combo_nombre.pack(pady=20)
+                try:
+                    supabase.table("productos").insert(paquete_datos).execute()
+                    st.session_state["pos_form_counter"] += 1
+                    st.success("🎉 ¡Registrado exitosamente!")
+                    st.rerun()
+                except Exception as servidor_error:
+                    st.error(f"🚨 Error: {servidor_error}")
+        else: st.warning("El campo Nombre del Producto es obligatorio en la celda.")
 
-# Cargamos el arreglo inicial de control
-combo_nombre['values'] = arreglo_100_nombres
-
-# EL ESCUDO INTELIGENTE: Vinculamos la lectura letra por letra al widget
-combo_nombre.bind("<KeyRelease>", filtrar_nombres_teclado)
-
-# ventana.mainloop()
+# --- PESTAÑA 3: MODIFICAR / ELIMINAR ---
+with t3:
+    if lista_productos_maestra:
+        st.subheader("Gestión de un Producto Individual")
+        prod_dict_e = {f"{p['nombre']} - {p['marca'] or 'Sin Marca'} ({p['tamano'] or 0}{p['unidad'] or ''})": p for p in lista_productos_maestra}
+        sel_e = st.selectbox("Selecciona el producto específico:", list(prod_dict_e.keys()), key="s_e_p")
+        p_e = prod_dict_e[sel_e]
+        
+        ec1, ec2 = st.columns(2)
+        en = ec1.text_input("Modificar Nombre", p_e['nombre'])
+        em = ec2.text_input("Modificar Marca", p_e['marca'] or "")
+        eb = ec1.text_input("Modificar Código de Barras", p_e['codigo_barras'] or "").strip()
+        et = ec2.number_input("Modificar Tamaño", value=float(p_e['tamano']) if p_e['tamano'] else 0.0, step=1.0)
+        eu = ec1.selectbox("Modificar Unidad", ["gr", "kg", "ml", "lt", "unidad"], index=["gr", "kg", "ml", "lt", "unidad"].index(p_e['unidad']) if p_e['unidad'] in ["gr", "kg", "ml", "lt", "unidad"] else 0)
+        ef = ec2.file_uploader("Cambiar Imagen", type=['jpg', 'png', 'jpeg', 'webp'])
+        
+        c_act = cat_inv_dict.get(p_e['id_cat'], "--- Seleccionar ---")
+        l_cat_e = ["--- Seleccionar ---"] + lista_cat
+        ecat = ec1.selectbox("Modificar Categoría", l_cat_e, index=l_cat_e.index(c_act) if c_act in l_cat_e else 0, key="e_c")
+        
+        l_sub_e = ["--- Seleccionar ---"]
+        if ecat != "--- Seleccionar ---":
+            id_cat_mod = cat_dict.get(ecat)
+            l_sub_e += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_mod]
+        s_act = subcat_inv_dict.get(p_e['id_subcat'], "--- Seleccionar ---")
+        esub = ec2.selectbox("Modificar Subcategoría", l_sub_e, index=l_sub_e.index(s_act) if s_act in l_sub_e else 0, key="e_s")
+        
+        f_ed = st.checkbox("⚠️ Forzar cambios", key="e_forzar")
+        b_del, b_upd = st.columns(2)
+        
+        if b_upd.button("💾 Guardar Cambios", type="primary"):
+            err, clon = validar_producto_existente(en, em, eb, et, eu)
+            if err and err != "barras" and clon['id_producto'] != p_e['id_producto'] and not f_ed: st.error("🚨 DUPLICADO.")
+            else:
+                n_url = subir_a_storage(ef) if ef else p_e['url_imagen']
+                v_c = cat_dict.get(ecat) if ecat != "--- Seleccionar ---" else None
+                v_s = None
+                if esub != "--- Seleccionar ---" and v_c is not None:
+                    for sc in lista_subcat_maestra:
+                        if sc.get('nombre') == esub and sc.get('id_cat') == v_c:
+                            v_s = sc.get('id_subcat')
+                            break
+                try:
+                    supabase.table("productos").update({"nombre": en, "marca": em if em else None, "codigo_barras": eb if eb else None, "tamano": et, "unidad": eu, "url_imagen": n_url, "id_cat": v_c, "id_subcat": v_s}).eq("id_producto", p_e['id_producto']).execute()
+                    st.success("¡Cambios guardados!"); st.rerun()
+                except Exception as e: st.error(f"Error: {e}")
+                
+        if b_del.button("🗑️ Eliminar Producto"):
+            try:
+                supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
+                st.warning("Eliminado."); st.rerun()
+            except Exception as e: st.error(f"Error: {e}")
+    else: st.info("El catálogo está vacío.")
