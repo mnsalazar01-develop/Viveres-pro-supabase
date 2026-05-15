@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES ARQUITECTURA POS DEFINITIVA ---
-VERSION_MODULO = "v11.2.0 - Disparador Predictivo en Caliente"
+# --- CONTROL DE VERSIONES CON ARREGLO DE CONTROL FIJO ---
+VERSION_MODULO = "v12.0.0 - Arreglo Fijo de 100 Nombres"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -12,19 +12,38 @@ if "supabase" not in st.session_state:
 
 supabase = st.session_state["supabase"]
 
-# Cabecera oficial minimalista de la pantalla principal
+# Cabecera oficial minimalista
 st.title("📦 Administración de Productos")
-st.caption(f"Motor de Carga: **{VERSION_MODULO}**")
+st.caption(f"Motor: **{VERSION_MODULO}**")
 
-# Inicializamos el contador de reseteo del formulario si no existe
 if "pos_form_counter" not in st.session_state:
     st.session_state["pos_form_counter"] = 0
 
 f_idx = st.session_state["pos_form_counter"]
 
-# 2. CARGA DE BASE DE DATOS MAESTRA (BACKEND LIGERO DE CONTEXTO)
+# Inicializamos las llaves de las cajas de trabajo si no existen en la RAM
+if f"input_nom_{f_idx}" not in st.session_state:
+    st.session_state[f"input_nom_{f_idx}"] = ""
+if f"input_mar_{f_idx}" not in st.session_state:
+    st.session_state[f"input_mar_{f_idx}"] = ""
+
+# --- CALLBACKS NATIVOS PARA TRANSFERENCIA DIRECTA A CAJA DE TRABAJO ---
+def transferir_nombre_a_caja():
+    idx = st.session_state["pos_form_counter"]
+    seleccionado = st.session_state[f"lk_nom_{idx}"]
+    if seleccionado and seleccionado != "--- Es un Nombre Nuevo ---":
+        st.session_state[f"input_nom_{idx}"] = seleccionado
+
+def transferir_marca_a_caja():
+    idx = st.session_state["pos_form_counter"]
+    seleccionada = st.session_state[f"lk_mar_{idx}"]
+    if seleccionada and seleccionada != "--- Es una Marca Nueva ---":
+        st.session_state[f"input_mar_{idx}"] = seleccionada
+
+# 2. CARGA DE BASE DE DATOS MAESTRA CON TU LÓGICA DE LIMITE ESTRICTO
 try:
-    res_p = supabase.table("productos").select("*").order("nombre").execute()
+    # --- TU REGLA DE INGENIERÍA: Arreglo acotado a 100 registros para evitar colapsos ---
+    res_p = supabase.table("productos").select("*").order("nombre").limit(100).execute()
     lista_productos_maestra = res_p.data if res_p.data else []
     
     res_c = supabase.table("categorias").select("*").order("id_cat").execute()
@@ -39,10 +58,6 @@ except:
     lista_productos_maestra = []
     lista_subcat_maestra = []
     cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
-
-# Universo indexado para el motor de botones predictivos en primer plano
-lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
-lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
 
 # --- FUNCIÓN PARA SUBIR IMÁGENES ---
 def subir_a_storage(archivo):
@@ -97,54 +112,22 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (CAPA DE TRABAJO CON FILTRADO RECOLECTOR v11.2.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA CON TU ARREGLO DE 100 REGISTROS v12.0.0) ---
 with t2:
-    # --- FILA 1: NOMBRE Y MARCA LADO A LADO ---
-    f1_c1, f1_c2 = st.columns(2)
+    # Llenamos los vectores de marcas y nombres usando el arreglo fijo de 100 elementos
+    lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')])))
+    lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""])))
     
+    # --- FILA 1: NOMBRE Y MARCA (LLENADO AUTOMÁTICO EN TIEMPO REAL DESDE TU ARREGLO) ---
+    f1_c1, f1_c2 = st.columns(2)
     with f1_c1:
-        key_memo_nom = f"memo_nom_{f_idx}"
-        val_actual_nom = st.session_state.get(key_memo_nom, "")
-        
-        # Inyectamos vaciado por callback para forzar al backend a leer el texto en el mismo milisegundo de digitación
-        nombre_final = f1_c1.text_input(
-            "Nombre del Producto*", 
-            value=val_actual_nom, 
-            key=f"w_nombre_{f_idx}", 
-            placeholder="Digite el nombre..."
-        )
-        
-        # Si el usuario escribe, el motor calcula coincidencias instantáneas en primer plano
-        if nombre_final and lista_nombres_existentes:
-            coincidencias_n = [n for n in lista_nombres_existentes if nombre_final.lower() in n.lower()][:4]
-            if coincidencias_n and nombre_final not in lista_nombres_existentes:
-                st.markdown("<p style='color: #2bc443; font-size: 0.82em; font-weight: bold; margin-top:2px; margin-bottom:2px;'>💡 Coincidencias (Clic para autorellenar):</p>", unsafe_allow_html=True)
-                btn_cols_n = st.columns(len(coincidencias_n))
-                for idx_n, nombre_sug in enumerate(coincidencias_n):
-                    if btn_cols_n[idx_n].button(nombre_sug, key=f"btn_n_{idx_n}_{f_idx}", use_container_width=True):
-                        st.session_state[key_memo_nom] = nombre_sug
-                        st.rerun()
-
+        # El control de selección lee tus 100 nombres y al cambiar ejecuta el callback de copia pasiva
+        st.selectbox("🔍 Buscar Nombre registrado (Máx 100):", ["--- Es un Nombre Nuevo ---"] + lista_nombres_existentes, key=f"lk_nom_{f_idx}", on_change=transferir_nombre_a_caja)
+        # Tu Caja de Trabajo real: texto libre inmune a borrados con el TAB o ENTER
+        nombre_final = st.text_input("Nombre del Producto*", key=f"input_nom_{f_idx}", placeholder="Nombre...")
     with f1_c2:
-        key_memo_mar = f"memo_mar_{f_idx}"
-        val_actual_mar = st.session_state.get(key_memo_mar, "")
-        
-        marca_final = f1_c2.text_input(
-            "Marca del Producto", 
-            value=val_actual_mar, 
-            key=f"w_marca_{f_idx}", 
-            placeholder="Digite la marca..."
-        )
-        
-        if marca_final and lista_marcas_existentes:
-            coincidencias_m = [m for m in lista_marcas_existentes if marca_final.lower() in m.lower()][:4]
-            if coincidencias_m and marca_final not in lista_marcas_existentes:
-                st.markdown("<p style='color: #2bc443; font-size: 0.82em; font-weight: bold; margin-top:2px; margin-bottom:2px;'>💡 Marcas similares (Clic para autorellenar):</p>", unsafe_allow_html=True)
-                btn_cols_m = st.columns(len(coincidencias_m))
-                for idx_m, marca_sug in enumerate(coincidencias_m):
-                    if btn_cols_m[idx_m].button(marca_sug, key=f"btn_m_{idx_m}_{f_idx}", use_container_width=True):
-                        st.session_state[key_memo_mar] = marca_sug
-                        st.rerun()
+        st.selectbox("🔍 Buscar Marca registrada (Opcional):", ["--- Es una Marca Nueva ---"] + lista_marcas_existentes, key=f"lk_mar_{f_idx}", on_change=transferir_marca_a_caja)
+        marca_final = st.text_input("Marca del Producto", key=f"input_mar_{f_idx}", placeholder="Marca...")
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA LADO A LADO ---
     f2_c1, f2_c2 = st.columns(2)
@@ -169,14 +152,14 @@ with t2:
     if foto:
         st.image(foto, caption="Miniatura", width=140)
 
-    # --- FILA 5: BOTÓN Y CHECKBOX UNIFICADOS ---
+    # --- FILA 5: BOTÓN Y CHECKBOX ---
     fc1, fc2 = st.columns(2)
     forzar_guardado = fc1.checkbox("⚠️ Forzar registro", key=f"n_forzar_{f_idx}")
     guardar_btn = fc2.button("🚀 Guardar Producto en Catálogo", type="primary", use_container_width=True)
 
     if guardar_btn:
-        str_nombre = str(nombre_final).strip() if nombre_final is not None else ""
-        str_marca = str(marca_final).strip() if marca_final is not None else ""
+        str_nombre = str(nombre_final).strip() if nombre_final else ""
+        str_marca = str(marca_final).strip() if marca_final else ""
         float_tam = float(tam) if tam is not None else 0.0
         
         if str_nombre != "":
@@ -200,10 +183,6 @@ with t2:
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
-                    
-                    if f"memo_nom_{f_idx}" in st.session_state: del st.session_state[f"memo_nom_{f_idx}"]
-                    if f"memo_mar_{f_idx}" in st.session_state: del st.session_state[f"memo_mar_{f_idx}"]
-                    
                     st.session_state["pos_form_counter"] += 1
                     st.success("🎉 ¡Registrado exitosamente!")
                     st.rerun()
