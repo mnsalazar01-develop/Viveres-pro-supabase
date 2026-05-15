@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES ARQUITECTURA DATA_EDITOR PRO ---
-VERSION_MODULO = "v15.0.0 - Celda de Inserción Inmune al TAB"
+# --- CONTROL DE VERSIONES ARQUITECTURA POS DEFINITIVA ---
+VERSION_MODULO = "v15.1.0 - Caja de Texto Libre con Asistente Flotante"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -40,9 +40,9 @@ except:
     lista_subcat_maestra = []
     cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
 
-# Vectores ordenados para las sugerencias del autocompletado
-lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')])))
-lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""])))
+# Vectores ordenados para las sugerencias del autocompletado pasivo
+lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
+lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
 
 # --- FUNCIÓN PARA SUBIR IMÁGENES ---
 def subir_a_storage(archivo):
@@ -97,31 +97,43 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (ARQUITECTURA DE INSERCIÓN INMUNE AL TAB v15.0.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE ENTRADA INMUNE AL TAB v15.1.0) ---
 with t2:
-    st.subheader("Formulario de Carga Ágil")
+    # --- FILA 1: NOMBRE Y MARCA (CAMPOS LIBRES COMPATIBLES CON DIGITACIÓN ULTRA RÁPIDA) ---
+    f1_c1, f1_c2 = st.columns(2)
     
-    # --- FILA 1: NOMBRE Y MARCA DENTRO DE CELDA INTERACTIVA INMUNE A BORRADOS ---
-    st.markdown("### 🛒 Identificación del Vívere")
-    
-    # Construimos la matriz limpia para que el editor dibuje los dos campos en primer plano
-    df_registro_actual = pd.DataFrame([{"Nombre del Producto*": "", "Marca del Producto": ""}])
-    
-    # El data_editor inyecta sugerencias pero congela textos nuevos de forma nativa al dar TAB o ENTER
-    editado = st.data_editor(
-        df_registro_actual,
-        column_config={
-            "Nombre del Producto*": st.column_config.SelectboxColumn(options=lista_nombres_existentes, required=True, width="large"),
-            "Marca del Producto": st.column_config.SelectboxColumn(options=lista_marcas_existentes, width="large")
-        },
-        hide_index=True,
-        use_container_width=True,
-        key=f"pos_editor_{f_idx}"
-    )
-    
-    # Extraemos de forma segura los valores congelados en la celda
-    nombre_final = editado.iloc[0]["Nombre del Producto*"]
-    marca_final = editado.iloc[0]["Marca del Producto"]
+    with f1_c1:
+        key_memo_nom = f"memo_nom_{f_idx}"
+        val_actual_nom = st.session_state.get(key_memo_nom, "")
+        
+        # Caja de Texto Libre Nv1: Ninguna regla visual puede borrar esto al presionar TAB
+        nombre_final = st.text_input("Nombre del Producto*", value=val_actual_nom, key=f"w_nombre_{f_idx}", placeholder="Escribe el nombre...")
+        
+        # Asistente en segundo plano: Si el usuario escribe algo, despliega sugerencias de los 100 registros abajo
+        if nombre_final and lista_nombres_existentes:
+            coincidencias_n = [n for n in lista_nombres_existentes if nombre_final.lower() in n.lower()][:3]
+            if coincidencias_n and nombre_final not in lista_nombres_existentes:
+                st.markdown("<p style='color: #2bc443; font-size: 0.82em; font-weight: bold; margin-top:2px; margin-bottom:2px;'>💡 Coincidencias (Clic para autorellenar):</p>", unsafe_allow_html=True)
+                s_nom_sel = st.selectbox("Seleccionar sugerencia de nombre:", ["--- Continuar con mi texto tipeado ---"] + coincidencias_n, key=f"sug_n_{f_idx}", label_visibility="collapsed")
+                if s_nom_sel != "--- Continuar con mi texto tipeado ---":
+                    st.session_state[key_memo_nom] = s_nom_sel
+                    st.rerun()
+                
+    with f1_c2:
+        key_memo_mar = f"memo_mar_{f_idx}"
+        val_actual_mar = st.session_state.get(key_memo_mar, "")
+        
+        # Caja de Texto Libre Nv1 para la Marca
+        marca_final = st.text_input("Marca del Producto", value=val_actual_mar, key=f"w_marca_{f_idx}", placeholder="Escribe la marca...")
+        
+        if marca_final and lista_marcas_existentes:
+            coincidencias_m = [m for m in lista_marcas_existentes if marca_final.lower() in m.lower()][:3]
+            if coincidencias_m and marca_final not in lista_marcas_existentes:
+                st.markdown("<p style='color: #2bc443; font-size: 0.82em; font-weight: bold; margin-top:2px; margin-bottom:2px;'>💡 Marcas similares (Clic para autorellenar):</p>", unsafe_allow_html=True)
+                s_mar_sel = st.selectbox("Seleccionar sugerencia de marca:", ["--- Continuar con mi marca tipeada ---"] + coincidencias_m, key=f"sug_m_{f_idx}", label_visibility="collapsed")
+                if s_mar_sel != "--- Continuar con mi marca tipeada ---":
+                    st.session_state[key_memo_mar] = s_mar_sel
+                    st.rerun()
 
     # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA LADO A LADO ---
     f2_c1, f2_c2 = st.columns(2)
@@ -152,8 +164,8 @@ with t2:
     guardar_btn = fc2.button("🚀 Guardar Producto en Catálogo", type="primary", use_container_width=True)
 
     if guardar_btn:
-        str_nombre = str(nombre_final).strip() if nombre_final else ""
-        str_marca = str(marca_final).strip() if marca_final else ""
+        str_nombre = str(nombre_final).strip() if nombre_final is not None else ""
+        str_marca = str(marca_final).strip() if marca_final is not None else ""
         float_tam = float(tam) if tam is not None else 0.0
         
         if str_nombre != "":
@@ -177,12 +189,17 @@ with t2:
 
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
+                    
+                    # Vaciamos los estados de memoria intermedios tras el éxito
+                    if f"memo_nom_{f_idx}" in st.session_state: del st.session_state[f"memo_nom_{f_idx}"]
+                    if f"memo_mar_{f_idx}" in st.session_state: del st.session_state[f"memo_mar_{f_idx}"]
+                    
                     st.session_state["pos_form_counter"] += 1
                     st.success("🎉 ¡Registrado exitosamente!")
                     st.rerun()
                 except Exception as servidor_error:
                     st.error(f"🚨 Error: {servidor_error}")
-        else: st.warning("El campo Nombre del Producto es obligatorio en la celda.")
+        else: st.warning("El campo Nombre del Producto es obligatorio.")
 
 # --- PESTAÑA 3: MODIFICAR / ELIMINAR ---
 with t3:
