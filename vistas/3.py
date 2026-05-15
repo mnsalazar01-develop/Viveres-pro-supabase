@@ -1,255 +1,48 @@
-import streamlit as st
+from nicegui import ui
 import pandas as pd
-from datetime import datetime
 
-# --- CONTROL DE VERSIONES ARQUITECTURA POS DEFINTIVA ---
-VERSION_MODULO = "v16.0.0 - Panel de Autocompletado Inmune al TAB"
+# --- CONTROL DE VERSIONES NICEGUI PURO ---
+VERSION_MODULO = "v1.0.0 - Formulario Asíncrono NiceGUI"
 
-# 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
-if "supabase" not in st.session_state:
-    st.error("Conexión central no encontrada. Por favor, regresa al inicio de la aplicación.")
-    st.stop()
+# Catálogo simulado de 4 registros para hacer la prueba física en caliente
+nombres_existentes = ["Aceite Vegetal", "Arroz Blanco", "Harina Pan", "Mayonesa Mavesa"]
+marcas_existentes = ["Diana", "Mavesa", "Nestlé", "Kraft"]
 
-supabase = st.session_state["supabase"]
+# --- DISEÑO DE LA INTERFAZ COMPACTA POS ---
+ui.label("📦 Administración de Productos").classes("text-xl font-bold text-slate-800 m-0")
+ui.label(f"Entorno de Prueba: {VERSION_MODULO}").classes("text-xs text-slate-500 m-0")
 
-# Cabecera oficial minimalista de la pantalla principal
-st.title("📦 Administración de Productos")
-st.caption(f"Motor de Carga: **{VERSION_MODULO}**")
-
-# Inicializamos el contador de reseteo del formulario si no existe
-if "pos_form_counter" not in st.session_state:
-    st.session_state["pos_form_counter"] = 0
-
-f_idx = st.session_state["pos_form_counter"]
-
-# 2. CARGA DE BASE DE DATOS MAESTRA (LIMITADO A TU REGLA DE 100 REGISTROS MAESTROS)
-try:
-    res_p = supabase.table("productos").select("*").order("nombre").limit(100).execute()
-    lista_productos_maestra = res_p.data if res_p.data else []
+# Contenedor de carga ágil
+with ui.card().classes("w-full max-w-4xl p-4 m-2 shadow-sm"):
+    ui.label("Formulario de Carga").classes("text-sm font-semibold text-slate-600")
     
-    res_c = supabase.table("categorias").select("*").order("id_cat").execute()
-    cat_dict = {c['nombre']: c['id_cat'] for c in res_c.data} if res_c.data else {}
-    cat_inv_dict = {c['id_cat']: c['nombre'] for c in res_c.data} if res_c.data else {}
-    lista_cat = [c['nombre'] for c in res_c.data] if res_c.data else []
-
-    res_sc = supabase.table("subcategorias").select("*").order("nombre").execute()
-    lista_subcat_maestra = res_sc.data if res_sc.data else []
-    subcat_inv_dict = {sc['id_subcat']: sc['nombre'] for sc in res_sc.data} if res_sc.data else {}
-except:
-    lista_productos_maestra = []
-    lista_subcat_maestra = []
-    cat_dict, cat_inv_dict, lista_cat, subcat_inv_dict = {}, {}, [], {}
-
-# Vectores ordenados para las sugerencias del autocompletado pasivo
-lista_nombres_existentes = sorted(list(set([p['nombre'] for p in lista_productos_maestra if p.get('nombre')]))) if lista_productos_maestra else []
-lista_marcas_existentes = sorted(list(set([p['marca'] for p in lista_productos_maestra if p.get('marca') and p['marca'].strip() != ""]))) if lista_productos_maestra else []
-
-# --- FUNCIÓN PARA SUBIR IMÁGENES ---
-def subir_a_storage(archivo):
-    if archivo:
-        try:
-            nombre_archivo = f"img_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{archivo.name.replace(' ', '_')}"
-            supabase.storage.from_("imagenes").upload(path=nombre_archivo, file=archivo.getvalue(), file_options={"content-type": archivo.type})
-            return supabase.storage.from_("imagenes").get_public_url(nombre_archivo)
-        except: return None
-    return None
-
-# --- FUNCIÓN DE VALIDACIÓN ANTI-DUPLICADOS ---
-def validar_producto_existente(nombre, marca, barras, tamano, unidad, id_excluir=None):
-    if barras and str(barras).strip() != "":
-        res_barras = supabase.table("productos").select("*").eq("codigo_barras", barras).execute()
-        if res_barras.data:
-            if id_excluir and res_barras.data.get('id_producto') == id_excluir: pass
-            else: return "barras", res_barras.data
-
-    if lista_productos_maestra and nombre and str(nombre).strip() != "":
-        nom_norm = "".join(str(nombre).lower().split())
-        mar_norm = "".join(str(marca or "").lower().split())
-        tam_norm = float(tamano if tamano is not None else 0)
-        uni_norm = str(unidad or "").lower()
+    # FILA 1: LAS DOS CAJAS INTELIGENTES REALES EN PRIMER PLANO
+    with ui.row().classes("w-full gap-4"):
+        # El select web interactivo: Autocompleta con clic, y si es nuevo CONGELA el texto al dar TAB
+        nombre_input = ui.select(
+            options=nombres_existentes,
+            with_input=True,
+            label="Nombre del Producto*",
+            placeholder="Busca o escribe un nombre..."
+        ).props('new-value-mode="add" clearable').classes("flex-1")
         
-        for p in lista_productos_maestra:
-            if id_excluir and p.get('id_producto') == id_excluir: continue
-            p_nom = "".join(str(p.get('nombre') or "").lower().split())
-            p_mar = "".join(str(p.get('marca') or "").lower().split())
-            p_tam = float(p.get('tamano') or 0)
-            p_uni = str(p.get('unidad') or "").lower()
-            
-            if nom_norm == p_nom and mar_norm == p_mar and tam_norm == p_tam and uni_norm == p_uni:
-                return "atributos", p
-    return None, None
+        marca_input = ui.select(
+            options=marcas_existentes,
+            with_input=True,
+            label="Marca del Producto",
+            placeholder="Busca o escribe una marca..."
+        ).props('new-value-mode="add" clearable').classes("flex-1")
 
-# 3. INTERFAZ ORGANIZADA POR PESTAÑAS HOMOLOGADAS
-t1, t2, t3 = st.tabs(["📋 Ver Catálogo", "➕ Nuevo Producto", "✏️ Editar/Borrar"])
+    # FILA 2: CONTENIDO NETO
+    with ui.row().classes("w-full gap-4 mt-2"):
+        tamano = ui.number(label="Tamaño / Peso", placeholder="Ej: 500").classes("flex-1")
+        unidad = ui.select(options=["gr", "kg", "ml", "lt", "unidad"], value="gr").classes("flex-1")
 
-# --- PESTAÑA 1: VER CATÁLOGO ---
-with t1:
-    if lista_productos_maestra:
-        lista_tabla_limpia = []
-        for p in lista_productos_maestra:
-            lista_tabla_limpia.append({
-                "ID": p.get("id_producto"), "Nombre": p.get("nombre"), "Marca": p.get("marca") or "Sin Marca",
-                "Código Barras": p.get("codigo_barras") or "N/A", "Tamaño": p.get("tamano"), "Unidad": p.get("unidad"),
-                "Categoría": cat_inv_dict.get(p.get("id_cat"), "Sin Categoría"),
-                "Subcategoría": subcat_inv_dict.get(p.get("id_subcat"), "Sin Subcategoría"), "url_imagen": p.get("url_imagen") or ""
-            })
-        df_mostrar = pd.DataFrame(lista_tabla_limpia)
-        st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
-    else: st.info("El catálogo de productos está vacío.")
+    # BOTÓN MAESTRO DE ACCIÓN POS
+    ui.button(
+        "🚀 Guardar Producto en Catálogo", 
+        on_click=lambda: ui.notify(f"🎉 Capturado: {nombre_input.value} - {marca_input.value}")
+    ).classes("w-full mt-4 bg-blue-600 text-white")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (SISTEMA DE ENTRADA INMUNE AL TAB v16.0.0) ---
-with t2:
-    # --- FILA 1: NOMBRE Y MARCA LADO A LADO ---
-    f1_c1, f1_c2 = st.columns(2)
-    
-    with f1_c1:
-        key_memo_nom = f"memo_nom_{f_idx}"
-        val_actual_nom = st.session_state.get(key_memo_nom, "")
-        
-        # Caja de Trabajo Libre Nativa: El TAB jamás la borra porque es texto plano puro
-        nombre_final = st.text_input("Nombre del Producto*", value=val_actual_nom, key=f"w_nombre_{f_idx}", placeholder="Digite el nombre...")
-        
-        # Panel asistencial dinámico de primer plano
-        if nombre_final and lista_nombres_existentes:
-            coincidencias_n = [n for n in lista_nombres_existentes if nombre_final.lower() in n.lower()][:4]
-            if coincidencias_n and nombre_final not in lista_nombres_existentes:
-                with st.expander("💡 Coincidencias encontradas en tu catálogo:", expanded=True):
-                    s_nom_click = st.selectbox("Selecciona para autorellenar:", ["--- Mantener mi texto tipeado ---"] + coincidencias_n, key=f"sug_n_{f_idx}")
-                    if s_nom_click != "--- Mantener mi texto tipeado ---":
-                        st.session_state[key_memo_nom] = s_nom_click
-                        st.rerun()
-
-    with f1_c2:
-        key_memo_mar = f"memo_mar_{f_idx}"
-        val_actual_mar = st.session_state.get(key_memo_mar, "")
-        
-        # Caja de Trabajo Libre Nativa para la Marca
-        marca_final = st.text_input("Marca del Producto", value=val_actual_mar, key=f"w_marca_{f_idx}", placeholder="Digite la marca...")
-        
-        if marca_final and lista_marcas_existentes:
-            coincidencias_m = [m for m in lista_marcas_existentes if marca_final.lower() in m.lower()][:4]
-            if coincidencias_m and marca_final not in lista_marcas_existentes:
-                with st.expander("💡 Marcas similares encontradas:", expanded=True):
-                    s_mar_click = st.selectbox("Selecciona para autorellenar:", ["--- Mantener mi marca tipeada ---"] + coincidencias_m, key=f"sug_m_{f_idx}")
-                    if s_mar_click != "--- Mantener mi marca tipeada ---":
-                        st.session_state[key_memo_mar] = s_mar_click
-                        st.rerun()
-
-    # --- FILA 2: TAMAÑO Y UNIDAD DE MEDIDA LADO A LADO ---
-    f2_c1, f2_c2 = st.columns(2)
-    tam = f2_c1.number_input("Tamaño / Peso (Vacio)", min_value=0.0, step=1.0, key=f"n_tam_{f_idx}", value=None, placeholder="Ej: 500, 250, 1")
-    uni = f2_c2.selectbox("Unidad de Medida", ["gr", "kg", "ml", "lt", "unidad"], key=f"n_uni_{f_idx}")
-    
-    # --- FILA 3: CATEGORÍA Y SUBCATEGORÍA LADO A LADO ---
-    f3_c1, f3_c2 = st.columns(2)
-    categoria_sel = f3_c1.selectbox("Categoría Principal", ["--- Seleccionar ---"] + lista_cat, key=f"n_cat_{f_idx}")
-    subcat_opciones = ["--- Seleccionar ---"]
-    if categoria_sel != "--- Seleccionar ---":
-        id_cat_actual = cat_dict.get(categoria_sel)
-        if id_cat_actual is not None:
-            subcat_opciones += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_actual]
-    subcategoria_sel = f3_c2.selectbox("Subcategoría (Reactiva)", subcat_opciones, key=f"n_sub_{f_idx}")
-    
-    # --- FILA 4: SKU Y FOTO LADO A LADO ---
-    f4_c1, f4_c2 = st.columns(2)
-    barras = f4_c1.text_input("Código de Barras (SKU)", key=f"n_bar_{f_idx}", value="", placeholder="Código de barras...").strip()
-    foto = f4_c2.file_uploader("Foto del Producto", type=['jpg', 'png', 'jpeg', 'webp'], key=f"n_foto_{f_idx}")
-    
-    if foto:
-        st.image(foto, caption="Miniatura", width=140)
-
-    # --- FILA 5: BOTÓN Y CHECKBOX ---
-    fc1, fc2 = st.columns(2)
-    forzar_guardado = fc1.checkbox("⚠️ Forzar registro", key=f"n_forzar_{f_idx}")
-    guardar_btn = fc2.button("🚀 Guardar Producto en Catálogo", type="primary", use_container_width=True)
-
-    if guardar_btn:
-        str_nombre = str(nombre_final).strip() if nombre_final is not None else ""
-        str_marca = str(marca_final).strip() if marca_final is not None else ""
-        float_tam = float(tam) if tam is not None else 0.0
-        
-        if str_nombre != "":
-            tipo_error, clon = validar_producto_existente(str_nombre, str_marca, barras, float_tam, uni)
-            if tipo_error and not forzar_guardado:
-                st.error(f"🚨 CLON: Ya existe '{clon['nombre']}' marca '{clon['marca']}'.")
-            else:
-                url_img = subir_a_storage(foto) if foto else None
-                id_cat_val = cat_dict.get(categoria_sel) if categoria_sel != "--- Seleccionar ---" else None
-                id_subcat_val = None
-                if subcategoria_sel != "--- Seleccionar ---" and id_cat_val is not None:
-                    for sc in lista_subcat_maestra:
-                        if sc.get('nombre') == subcategoria_sel and sc.get('id_cat') == id_cat_val:
-                            id_subcat_val = sc.get('id_subcat')
-                            break
-
-                paquete_datos = {
-                    "nombre": str_nombre, "marca": str_marca if str_marca != "" else None, "codigo_barras": barras if barras else None,
-                    "tamano": float_tam, "unidad": uni, "url_imagen": url_img, "id_cat": id_cat_val, "id_subcat": id_subcat_val
-                }
-
-                try:
-                    supabase.table("productos").insert(paquete_datos).execute()
-                    
-                    if f"memo_nom_{f_idx}" in st.session_state: del st.session_state[f"memo_nom_{f_idx}"]
-                    if f"memo_mar_{f_idx}" in st.session_state: del st.session_state[f"memo_mar_{f_idx}"]
-                    
-                    st.session_state["pos_form_counter"] += 1
-                    st.success("🎉 ¡Registrado exitosamente!")
-                    st.rerun()
-                except Exception as servidor_error:
-                    st.error(f"🚨 Error: {servidor_error}")
-        else: st.warning("El campo Nombre es obligatorio.")
-
-# --- PESTAÑA 3: MODIFICAR / ELIMINAR ---
-with t3:
-    if lista_productos_maestra:
-        st.subheader("Gestión de un Producto Individual")
-        prod_dict_e = {f"{p['nombre']} - {p['marca'] or 'Sin Marca'} ({p['tamano'] or 0}{p['unidad'] or ''})": p for p in lista_productos_maestra}
-        sel_e = st.selectbox("Selecciona el producto específico:", list(prod_dict_e.keys()), key="s_e_p")
-        p_e = prod_dict_e[sel_e]
-        
-        ec1, ec2 = st.columns(2)
-        en = ec1.text_input("Modificar Nombre", p_e['nombre'])
-        em = ec2.text_input("Modificar Marca", p_e['marca'] or "")
-        eb = ec1.text_input("Modificar Código de Barras", p_e['codigo_barras'] or "").strip()
-        et = ec2.number_input("Modificar Tamaño", value=float(p_e['tamano']) if p_e['tamano'] else 0.0, step=1.0)
-        eu = ec1.selectbox("Modificar Unidad", ["gr", "kg", "ml", "lt", "unidad"], index=["gr", "kg", "ml", "lt", "unidad"].index(p_e['unidad']) if p_e['unidad'] in ["gr", "kg", "ml", "lt", "unidad"] else 0)
-        ef = ec2.file_uploader("Cambiar Imagen", type=['jpg', 'png', 'jpeg', 'webp'])
-        
-        c_act = cat_inv_dict.get(p_e['id_cat'], "--- Seleccionar ---")
-        l_cat_e = ["--- Seleccionar ---"] + lista_cat
-        ecat = ec1.selectbox("Modificar Categoría", l_cat_e, index=l_cat_e.index(c_act) if c_act in l_cat_e else 0, key="e_c")
-        
-        l_sub_e = ["--- Seleccionar ---"]
-        if ecat != "--- Seleccionar ---":
-            id_cat_mod = cat_dict.get(ecat)
-            l_sub_e += [sc['nombre'] for sc in lista_subcat_maestra if sc.get('id_cat') == id_cat_mod]
-        s_act = subcat_inv_dict.get(p_e['id_subcat'], "--- Seleccionar ---")
-        esub = ec2.selectbox("Modificar Subcategoría", l_sub_e, index=l_sub_e.index(s_act) if s_act in l_sub_e else 0, key="e_s")
-        
-        f_ed = st.checkbox("⚠️ Forzar cambios", key="e_forzar")
-        b_del, b_upd = st.columns(2)
-        
-        if b_upd.button("💾 Guardar Cambios", type="primary"):
-            err, clon = validar_producto_existente(en, em, eb, et, eu)
-            if err and err != "barras" and clon['id_producto'] != p_e['id_producto'] and not f_ed: st.error("🚨 DUPLICADO.")
-            else:
-                n_url = subir_a_storage(ef) if ef else p_e['url_imagen']
-                v_c = cat_dict.get(ecat) if ecat != "--- Seleccionar ---" else None
-                v_s = None
-                if esub != "--- Seleccionar ---" and v_c is not None:
-                    for sc in lista_subcat_maestra:
-                        if sc.get('nombre') == esub and sc.get('id_cat') == v_c:
-                            v_s = sc.get('id_subcat')
-                            break
-                try:
-                    supabase.table("productos").update({"nombre": en, "marca": em if em else None, "codigo_barras": eb if eb else None, "tamano": et, "unidad": eu, "url_imagen": n_url, "id_cat": v_c, "id_subcat": v_s}).eq("id_producto", p_e['id_producto']).execute()
-                    st.success("¡Cambios guardados!"); st.rerun()
-                except Exception as e: st.error(f"Error: {e}")
-                
-        if b_del.button("🗑️ Eliminar Producto"):
-            try:
-                supabase.table("productos").delete().eq("id_producto", p_e['id_producto']).execute()
-                st.warning("Eliminado."); st.rerun()
-            except Exception as e: st.error(f"Error: {e}")
-    else: st.info("El catálogo está vacío.")
+# El comando obligatorio que enciende el servidor web interno de NiceGUI
+ui.run(native=False, port=8080, reload=False)
