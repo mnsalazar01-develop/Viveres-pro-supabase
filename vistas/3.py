@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- CONTROL DE VERSIONES ARQUITECTURA POS DEFINTIVA ---
-VERSION_MODULO = "v11.0.0 - Espejo Predictivo en Primer Plano"
+# --- CONTROL DE VERSIONES ARQUITECTURA POS DEFINITIVA ---
+VERSION_MODULO = "v11.2.0 - Disparador Predictivo en Caliente"
 
 # 1. VERIFICACIÓN DE CONEXIÓN CENTRAL COMPARTIDA
 if "supabase" not in st.session_state:
@@ -97,25 +97,28 @@ with t1:
         st.dataframe(df_mostrar, column_config={"url_imagen": st.column_config.ImageColumn()}, use_container_width=True)
     else: st.info("El catálogo de productos está vacío.")
 
-# --- PESTAÑA 2: NUEVO PRODUCTO (ARQUITECTURA DE ENTRADA ÚNICA INMUNE A BORRADOS v11.0.0) ---
+# --- PESTAÑA 2: NUEVO PRODUCTO (CAPA DE TRABAJO CON FILTRADO RECOLECTOR v11.2.0) ---
 with t2:
-    # --- FILA 1: NOMBRE Y MARCA (CAMPOS LIBRES CON BOTONES DE AUTOCOMPLETADO) ---
+    # --- FILA 1: NOMBRE Y MARCA LADO A LADO ---
     f1_c1, f1_c2 = st.columns(2)
     
     with f1_c1:
-        # Recuperamos si hay un valor pre-seleccionado por el motor de sugerencias
         key_memo_nom = f"memo_nom_{f_idx}"
         val_actual_nom = st.session_state.get(key_memo_nom, "")
         
-        # Caja de Trabajo de texto puro: Inmune a limpiezas por el foco del TAB o ENTER
-        nombre_final = st.text_input("Nombre del Producto*", value=val_actual_nom, key=f"w_nombre_{f_idx}", placeholder="Digite el nombre...")
+        # Inyectamos vaciado por callback para forzar al backend a leer el texto en el mismo milisegundo de digitación
+        nombre_final = f1_c1.text_input(
+            "Nombre del Producto*", 
+            value=val_actual_nom, 
+            key=f"w_nombre_{f_idx}", 
+            placeholder="Digite el nombre..."
+        )
         
-        # Inteligencia en Primer Plano: Si escribe letras, calcula sugerencias instantáneas
+        # Si el usuario escribe, el motor calcula coincidencias instantáneas en primer plano
         if nombre_final and lista_nombres_existentes:
             coincidencias_n = [n for n in lista_nombres_existentes if nombre_final.lower() in n.lower()][:4]
             if coincidencias_n and nombre_final not in lista_nombres_existentes:
                 st.markdown("<p style='color: #2bc443; font-size: 0.82em; font-weight: bold; margin-top:2px; margin-bottom:2px;'>💡 Coincidencias (Clic para autorellenar):</p>", unsafe_allow_html=True)
-                # Dibujamos botones compactos horizontales alineados
                 btn_cols_n = st.columns(len(coincidencias_n))
                 for idx_n, nombre_sug in enumerate(coincidencias_n):
                     if btn_cols_n[idx_n].button(nombre_sug, key=f"btn_n_{idx_n}_{f_idx}", use_container_width=True):
@@ -126,10 +129,13 @@ with t2:
         key_memo_mar = f"memo_mar_{f_idx}"
         val_actual_mar = st.session_state.get(key_memo_mar, "")
         
-        # Caja de Trabajo de texto puro para la Marca
-        marca_final = st.text_input("Marca del Producto", value=val_actual_mar, key=f"w_marca_{f_idx}", placeholder="Digite la marca...")
+        marca_final = f1_c2.text_input(
+            "Marca del Producto", 
+            value=val_actual_mar, 
+            key=f"w_marca_{f_idx}", 
+            placeholder="Digite la marca..."
+        )
         
-        # Calcular sugerencias para la Marca
         if marca_final and lista_marcas_existentes:
             coincidencias_m = [m for m in lista_marcas_existentes if marca_final.lower() in m.lower()][:4]
             if coincidencias_m and marca_final not in lista_marcas_existentes:
@@ -163,7 +169,7 @@ with t2:
     if foto:
         st.image(foto, caption="Miniatura", width=140)
 
-    # --- FILA 5: BOTÓN Y CHECKBOX ---
+    # --- FILA 5: BOTÓN Y CHECKBOX UNIFICADOS ---
     fc1, fc2 = st.columns(2)
     forzar_guardado = fc1.checkbox("⚠️ Forzar registro", key=f"n_forzar_{f_idx}")
     guardar_btn = fc2.button("🚀 Guardar Producto en Catálogo", type="primary", use_container_width=True)
@@ -195,7 +201,6 @@ with t2:
                 try:
                     supabase.table("productos").insert(paquete_datos).execute()
                     
-                    # Limpieza total de los estados de memoria temporales
                     if f"memo_nom_{f_idx}" in st.session_state: del st.session_state[f"memo_nom_{f_idx}"]
                     if f"memo_mar_{f_idx}" in st.session_state: del st.session_state[f"memo_mar_{f_idx}"]
                     
