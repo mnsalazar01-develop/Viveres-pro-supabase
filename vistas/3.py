@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
+VERSION_MODULO = "v20.0.0 - Nueva Via"
+
 # ─────────────────────────────────────────────
 # CONSTANTES
 # ─────────────────────────────────────────────
