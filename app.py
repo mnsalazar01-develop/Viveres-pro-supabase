@@ -1,51 +1,55 @@
+# ==============================================================================
+# PROGRAMA CENTRAL: app.py (CENTRO DE CONTROL PURIFICADO)
+# VERSIÓN: 4.6.0 (INTEGRACIÓN NATIVA DEL CLASIFICADOR DRAG & DROP WEB)
+# DESCRIPCIÓN: Panel Central Retail con Navegación por Botones y Control de Auto-Importación
+# MODIFICACIÓN: Enrutamiento directo al módulo HTML5 sin requisitos locales de PC.
+# ==============================================================================
+
 import streamlit as st
-from supabase import create_client
-import importlib.util
-import os
 
-# 1. CONFIGURACIÓN GLOBAL FORZADA DE LA APP
-st.set_page_config(page_title="Control Víveres Pro v3.0", layout="wide", page_icon="🛒")
+# 1. CONFIGURACIÓN CORPORATIVA DE LA VENTANA WEB DE PRODUCCIÓN
+st.set_page_config(
+    page_title="Sistema Maestro de Productos",
+    page_icon="📦",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# 2. CONEXIÓN MAESTRA CENTRALIZADA A SUPABASE
-@st.cache_resource
-def init_connection():
-    try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        return create_client(url, key)
-    except Exception as e:
-        st.error(f"Falta configurar las llaves en los Secrets de Streamlit: {e}")
-        st.stop()
+# 2. DEFINICIÓN DE LA PÁGINA DE PORTADA (CENTRO DE CONTROL)
+def mostrar_centro_control():
+    st.title("🏭 Centro de Control")
+    st.markdown("Bienvenido al ecosistema modular de clasificación, control y analítica de productos.")
+    st.markdown("---")
 
-if "supabase" not in st.session_state:
-    st.session_state["supabase"] = init_connection()
+    # Grilla horizontal simétrica de 6 columnas limpias de alta densidad para la suite
+    col_inv, col_prod, col_maestro, col_subcat, col_saneamiento, col_bi = st.columns(6)
 
-# 3. INTERFAZ DE EMERGENCIA SIN BUCO DE CACHÉ
-st.sidebar.title("🛒 Control Víveres")
-st.sidebar.caption("Modo de Contingencia Sólido")
+    with col_inv:
+        st.markdown("#### Carga de Inventario")
+        st.caption("Carga de archivos planos CSV mediante el diccionario de confianza.")
+        if st.button("📤 Batch - Imput Inventario", use_container_width=True, key="btn_p1_inv_v460"):
+            st.switch_page(pagina_inventario)
 
-# Definimos el menú manual en la barra lateral
-opcion = st.sidebar.selectbox("Ir a:", ["📦 Gestión de Productos"])
 
-# Carga forzada del archivo de productos saltando el st.navigation() corrupto de la nube
-if opcion == "📦 Gestión de Productos":
-    # Buscamos el archivo en la raíz o en la carpeta vistas de forma segura
-    ruta_raiz = "3.py"
-    ruta_vistas = "vistas/3.py"
+    st.markdown("---")
+    st.info("💡 Consejo técnico: Utiliza la barra lateral de la izquierda para ingresar directo a los programas o para cambiar de estación de trabajo con un clic.")
+
+# 3. DECLARACIÓN FORMAL DE INSTANCIAS DE PÁGINAS SATÉLITES EN LA RAÍZ
+pagina_inicio = st.Page(mostrar_centro_control, title="🏭 Centro de Control", icon="🏠", default=True)
+pagina_inventario = st.Page("cargar_inventario.py", title="Cargar Inventario Masivo", icon="📤")
+pagina_datos = st.Page("subir_csv.py", title="Subir Datos", icon="⚙️")
+# 4. CONSTRUCCIÓN AUTOMÁTICA DEL MOTOR DE NAVEGACIÓN EN LA BARRA LATERAL
+enrutador_global = st.navigation([
+    pagina_inicio,
+    pagina_inventario, 
+    pagina_datos
     
-    archivo_a_cargar = None
-    if os.path.exists(ruta_raiz):
-        archivo_a_cargar = ruta_raiz
-    elif os.path.exists(ruta_vistas):
-        archivo_a_cargar = ruta_vistas
+])
 
-    if archivo_a_cargar:
-        try:
-            # Ejecutamos el archivo de productos directamente en la pantalla actual
-            spec = importlib.util.spec_from_file_location("modulo_productos", archivo_a_cargar)
-            modulo = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(modulo)
-        except Exception as err_ejecucion:
-            st.error(f"🚨 Error al renderizar la pantalla de productos: {err_ejecucion}")
-    else:
-        st.error("⚠️ No se encontró el archivo '3.py'. Asegúrate de tenerlo en la raíz de tu GitHub o dentro de la carpeta 'vistas/3.py'.")
+# Componentes fijos de control e identidad comercial en la barra de la izquierda
+st.sidebar.markdown("### 🔒 Ecosistema Retail Activo")
+st.sidebar.caption("Estaciones de trabajo descentralizadas e independientes.")
+st.sidebar.markdown("---")
+
+# 5. DESPACHO CENTRAL SEGURO Y CONTROL DEL HILO DE EJECUCIÓN
+enrutador_global.run()
