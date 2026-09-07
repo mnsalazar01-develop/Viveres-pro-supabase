@@ -185,7 +185,7 @@ else:
                 items_finales_mosaico = items_del_pasillo
 # ==============================================================================
 # PROGRAMA: fusion_maquetador_visual.py | PARTE 4 DE 5
-# MODULO: MATRIZ DE PRODUCTOS E INSERCIÓN DIRECTA A POSTGRESQL (NEON)
+# MODULO: MATRIZ DE PRODUCTOS COMPACTOS E INSERCIÓN DIRECTA A POSTGRESQL (NEON)
 # ==============================================================================
 
             # (Bloque anidado dentro del contexto de la pestaña activa de la Parte 3)
@@ -199,35 +199,46 @@ else:
                     for idx, prod in enumerate(bloque_items):
                         with columnas_ui[idx]:
                             id_p_raw = int(prod["id_producto"])
-                            nombre_lbl = str(prod.get("nombre", "")).strip().upper()[:16]
+                            nombre_lbl = str(prod.get("nombre", "")).strip().upper()
                             marca_lbl = str(prod.get("marca", "Sin Marca")).strip()[:10]
                             formato_empaque = f"{prod.get('tamano', '')} {prod.get('unit', '')}".strip()
                             url_foto = prod.get("url_imagen") or "https://picsum.photos"
                             
-                            html_tarjeta = f"""
-                            <div style='line-height:1.2; margin-bottom:6px; height: 42px; overflow: hidden;'>
-                                <b style='font-size: 0.65rem; color:#cdd6f4;'>{nombre_lbl}</b><br>
-                                <span style='font-size: 0.58rem; color: #a6adc8;'>{marca_lbl} | {formato_empaque}</span>
-                            </div>
-                            """
+                            # Renderizado de Micro-Tarjeta de alta densidad (idéntico al programa anterior)
+                            st.markdown(
+                                f"""
+                                <div style="display: flex; align-items: center; background-color: #1e1e2e; padding: 8px; border-radius: 6px; border-left: 5px solid #0d6efd; box-shadow: 0 1px 3px rgba(0,0,0,0.2); margin-bottom: 8px;">
+                                    <div style="flex-shrink: 0; margin-right: 10px;">
+                                        <img src="{url_foto}" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px; border: 1px solid #313244; background-color: #fff;"/>
+                                    </div>
+                                    <div style="flex-grow: 1; min-width: 0;">
+                                        <strong style="color: #cdd6f4; font-size: 0.75rem; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{nombre_lbl}</strong>
+                                        <span style="color: #a6adc8; font-size: 0.65rem; display: block;">{marca_lbl} | {formato_empaque}</span>
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True
+                            )
                             
+                            # Contenedor de inputs proporcionales para optimizar el espacio vertical
                             with st.container(border=True):
-                                st.markdown(html_tarjeta, unsafe_allow_html=True)
-                                if prod.get("url_imagen"):
-                                    st.image(url_foto, use_container_width=True)
-                                
                                 pvp_input = st.number_input("PVP ($):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key=f"pvp_{id_p_raw}_{id_campana_activa}")
-                                pag_input = st.selectbox("Pág Revista:", options=list(range(1, 16)), index=0, key=f"pag_{id_p_raw}_{id_campana_activa}")
-                                slot_input = st.selectbox("Slot Pos:", options=list(range(1, 13)), index=0, key=f"slot_{id_p_raw}_{id_campana_activa}")
-                                aln_input = st.selectbox("Alm.:", options=["I", "C", "D"], index=1, key=f"aln_{id_p_raw}_{id_campana_activa}")
                                 
-                                if st.button("🚀 Publicar Oferta", use_container_width=True, key=f"btn_pub_{id_p_raw}_{id_campana_activa}"):
+                                c_sel1, c_sel2, c_sel3 = st.columns([1, 1, 1])
+                                with c_sel1:
+                                    pag_input = st.selectbox("Pág:", options=list(range(1, 16)), index=0, key=f"pag_{id_p_raw}_{id_campana_activa}")
+                                with c_sel2:
+                                    slot_input = st.selectbox("Slot:", options=list(range(1, 13)), index=0, key=f"slot_{id_p_raw}_{id_campana_activa}")
+                                with c_sel3:
+                                    aln_input = st.selectbox("Alm:", options=["I", "C", "D"], index=1, key=f"aln_{id_p_raw}_{id_campana_activa}")
+                                
+                                # Botón transaccional unaria integrado en el pie
+                                if st.button("🚀 Publicar", use_container_width=True, key=f"btn_pub_{id_p_raw}_{id_campana_activa}"):
                                     if pvp_input <= 0.0:
-                                        st.error("Fije un precio mayor a 0.")
+                                        st.error("Fije precio > 0.")
                                     elif "Por Ciudad" in st.session_state.get("cobertura_operador", "") and ciudad_seleccionada is None:
-                                        st.error("Falta seleccionar Ciudad.")
+                                        st.error("Falta Ciudad.")
                                     elif "Sede Única" in st.session_state.get("cobertura_operador", "") and id_sucursal_insertar is None:
-                                        st.error("Falta seleccionar Sucursal.")
+                                        st.error("Falta Sede.")
                                     else:
                                         sucursal_final_val = None
                                         if "Por Ciudad" in st.session_state["cobertura_operador"]: 
@@ -246,11 +257,12 @@ else:
                                                    int(id_campana_activa), int(pag_input), int(slot_input), str(aln_input), sucursal_final_val)
                                         
                                         if ejecutar_consulta_neon(query_insert, valores, fetch=False, commit=True):
-                                            st.toast(f"¡{nombre_lbl} publicado exitosamente!", icon="✅")
+                                            st.toast(f"¡{nombre_lbl} publicado!", icon="✅")
                                             st.cache_data.clear()
                                             st.rerun()
             else:
                 st.info("🍃 No quedan productos pendientes por maquetar en este pasillo.")
+
 # ==============================================================================
 # PROGRAMA: fusion_maquetador_visual.py | PARTE 5 DE 5
 # MODULO: BITÁCORA DE CONTROL DE OFERTAS PUBLICADAS Y SIDEBAR
