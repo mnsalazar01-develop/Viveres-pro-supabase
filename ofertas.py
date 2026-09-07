@@ -91,7 +91,7 @@ def descargar_maestros_directo_neon_3fn():
         st.stop()
 
 # Desempaquetado inmediato en memoria RAM de alta velocidad
-ofertas_raw, productos_bd, supermercados_bd, sucursales_bd, campanas_bd, master_catalogo, master_marcas, master_categorias, master_subcategorias = descargar_maestros_directo_neon_3fn()
+ofertas_raw, productos_bd, supermercados_bd, sucursales_bd, campanas_bd, master_categorias, master_subcategorias = descargar_maestros_directo_neon_3fn()
 
 st.title("📝 Registro de Ofertas")
 st.caption(f"Consola Transaccional por Campaña Sincronizada Neon | Build v{_version_}")
