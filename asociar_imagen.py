@@ -26,7 +26,7 @@ def obtener_lista_productos():
     try:
         conn = psycopg2.connect(url_limpia)
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id_producto, nombre FROM public.productos WHERE nombre IS NOT NULL ORDER BY nombre ASC;")
+        cur.execute("SELECT id_producto, nombre, marca, tamano, unidad FROM public.productos WHERE nombre IS NOT NULL ORDER BY nombre ASC;")
         productos = cur.fetchall()
         return productos
     except Exception as e:
@@ -98,7 +98,7 @@ else:
     producto_seleccionado = st.selectbox(
         "1. Selecciona el Producto:",
         options=catalogo,
-        format_func=lambda prod: f"{prod['nombre']} (ID: {prod['id_producto']})"
+        format_func=lambda prod: f"{prod['nombre']} {prod['marca']}"
     )
     
     id_prod = producto_seleccionado['id_producto']
