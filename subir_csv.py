@@ -9,7 +9,7 @@ st.write("Sube un archivo CSV desde tu computadora para crear o reemplazar tu ta
 archivo_subido = st.file_uploader("Elige tu archivo CSV", type=["csv"])
 
 # 2. Configura el nombre que tendrá la tabla en tu base de datos de Neon
-NOMBRE_TABLA = "pre_ofertas" 
+NOMBRE_TABLA = "sucursales" 
 
 # El proceso solo inicia cuando el usuario sube un archivo
 if archivo_subido is not None:
