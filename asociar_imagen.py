@@ -39,7 +39,7 @@ def obtener_lista_productos():
 # --- FUNCIÓN PARA SUBIR A IMGBB ---
 def subir_imagen_a_album(imagen_bytes, nombre_producto):
     """Sube la imagen en memoria a ImgBB dentro del álbum especificado."""
-    url_api = "https://imgbb.com"  # URL correcta de la API
+    url_api = "https://api.imgbb.com/1/upload"  # URL correcta de la API
     
     try:
         imagen_base64 = base64.b64encode(imagen_bytes).decode('utf-8')
