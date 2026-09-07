@@ -64,29 +64,55 @@ def subir_imagen_a_album(imagen_bytes, nombre_producto):
         return None
 
 # --- FUNCIÓN PARA GUARDAR EN NEON ---
-def guardar_url_en_neon(id_producto, url_publica_imagen):
-    """Hace el UPDATE directamente en la fila del producto elegido."""
+def guardar_url_en_neon(id_producto, url_foto):
+    """
+    Actualiza de forma persistente el campo url_imagen aceptando 
+    IDs de productos que contengan espacios en blanco (Tipo Texto/VARCHAR).
+    """
+    # 1. Aseguramos que el ID se maneje estrictamente como TEXTO, respetando sus espacios
+    id_parametro = str(id_producto)
+
+    # Validamos que no esté completamente vacío
+    if not id_parametro.strip():
+        st.error("❌ El ID de producto proporcionado está vacío.")
+        return False
+
+    query_update = """
+        UPDATE public.productos 
+        SET url_imagen = %s 
+        WHERE id_producto = %s;
+    """
+    
     conn = None
     try:
-        conn = psycopg2.connect(url_limpia)
+        # Conexión directa a Neon
+        conn = psycopg2.connect(st.secrets["neon"]["url"])
         cur = conn.cursor()
         
-        query_update = """
-            UPDATE public.productos 
-            SET url_imagen = %s 
-            WHERE id_producto = %s;
-        """
-        cur.execute(query_update, (url_publica_imagen, id_producto))
+        # Ejecutamos pasando el ID como string con sus espacios exactos
+        cur.execute(query_update, (str(url_foto).strip(), id_parametro))
+        
+        # Verificar cuántas filas coincidieron con ese ID exacto
+        filas_afectadas = cur.rowcount
+        
+        if filas_afectadas == 0:
+            st.warning(f"⚠️ No se encontró ningún producto con el ID exacto: '{id_parametro}' (Verifica si faltan o sobran espacios).")
+            conn.rollback()
+            return False
+            
+        # Confirmamos la transacción en Neon
         conn.commit()
         return True
-    except Exception as error:
-        st.error(f"❌ Error al guardar en Base de Datos: {error}")
+        
+    except Exception as e:
+        st.error(f"❌ Fallo crítico al escribir en la tabla productos de Neon: {e}")
         if conn:
             conn.rollback()
         return False
     finally:
         if conn:
             conn.close()
+
 
 # --- FLUJO PRINCIPAL DEL PROGRAMA ---
 catalogo = obtener_lista_productos()
