@@ -82,7 +82,6 @@ def descargar_maestros_directo_neon_3fn():
         m_bd = ejecutar_consulta_neon("SELECT * FROM public.supermercados;") or []
         s_bd = ejecutar_consulta_neon("SELECT * FROM public.sucursales;") or []
         c_bd = ejecutar_consulta_neon("SELECT id_campana, id_super, nombre_campana, fecha_inicio, fecha_fin FROM public.campanas;") or []
-
         categorias_bd = ejecutar_consulta_neon("SELECT id_cat, nombre FROM public.categorias ORDER BY nombre;") or []
         subcategorias_bd = ejecutar_consulta_neon("SELECT id_subcat, nombre, id_cat FROM public.subcategorias ORDER BY nombre;") or []
         
