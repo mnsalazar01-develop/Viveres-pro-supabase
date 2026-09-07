@@ -5,11 +5,11 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 # Cargar secretos de Neon
-DATABASE_URL = st.secrets["neon"]["DATABASE_URL"]
+url = st.secrets["neon"]["DATABASE_URL"]
 
 # Cargar secretos de ImgBB
-IMGBB_API_KEY = st.secrets["imgbb"]["API_KEY"]
-IMGBB_ALBUM_ID = st.secrets["imgbb"]["ALBUM_ID"]
+IMGBB_API_KEY = st.secrets["imgbb"]["api_key"]
+IMGBB_ALBUM_ID = st.secrets["imgbb"]["album_id"]
 
 # Ya puedes usar las variables en tus funciones de conexión y subida...
 
