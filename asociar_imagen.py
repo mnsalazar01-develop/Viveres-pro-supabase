@@ -118,10 +118,24 @@ else:
     if opcion_metodo == "Subir imagen desde la computadora":
         archivo_imagen = st.file_uploader("Selecciona o arrastra la imagen del producto", type=["jpg", "jpeg", "png", "webp"])
         
+        # Guardar el archivo en el estado para evitar pérdidas al hacer clic en botones
         if archivo_imagen is not None:
-            if st.button("🚀 Subir e Inyectar en Neon"):
+            # Almacenamos los bytes en memoria persistentemente
+            st.session_state["bytes_archivo_subido"] = archivo_imagen.getvalue()
+            st.session_state["nombre_archivo_subido"] = archivo_imagen.name
+        else:
+            if "bytes_archivo_subido" in st.session_state:
+                del st.session_state["bytes_archivo_subido"]
+                del st.session_state["nombre_archivo_subido"]
+
+        # Si existen bytes en el estado, habilitamos la interacción de guardado
+        if "bytes_archivo_subido" in st.session_state:
+            st.success(f"📸 Archivo cargado en memoria listo para procesar: {st.session_state['nombre_archivo_subido']}")
+            
+            if st.button("🚀 Subir e Inyectar en Neon", type="primary", use_container_width=True):
                 with st.spinner("Procesando subida a ImgBB y guardando en Neon..."):
-                    bytes_de_la_foto = archivo_imagen.read()
+                    # Extraemos los bytes seguros desde la memoria persistente
+                    bytes_de_la_foto = st.session_state["bytes_archivo_subido"]
                     
                     # Ejecuta la subida a internet primero
                     url_foto = subir_imagen_a_album(bytes_de_la_foto, nombre_prod)
@@ -132,8 +146,15 @@ else:
                             st.success(f"¡Éxito! Foto subida y asociada a '{nombre_prod}' correctamente. 🎉")
                             st.info(f"🔗 Enlace guardado: {url_foto}")
                             st.balloons()
+                            
+                            # Limpieza opcional del estado para evitar dobles envíos accidentales
+                            del st.session_state["bytes_archivo_subido"]
+                            st.rerun()
+                    else:
+                        st.error("❌ No se pudo obtener la URL de ImgBB. Revisa las credenciales de la API.")
         else:
             st.info("💡 Sube una imagen desde tu PC para habilitar el botón de guardado.")
+
 
     # === MODALIDAD 2: ENLACE DEL ÁLBUM ===
     elif opcion_metodo == "Asociar a imagen existente en el álbum":
