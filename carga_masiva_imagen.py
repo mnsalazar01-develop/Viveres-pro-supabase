@@ -3,11 +3,12 @@ import requests
 import base64
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import unicodedata  # 👈 Nueva librería para normalizar textos con acentos
 
 # --- CONFIGURACIÓN DE LA INTERFAZ DE STREAMLIT ---
 st.set_page_config(page_title="Carga Masiva Pro", page_icon="📦", layout="centered")
 st.title("📦 Carga y Asociación Masiva de Imágenes")
-st.write("Arrastra múltiples imágenes a la vez. El programa buscará el producto en Neon por el nombre de la foto.")
+st.write("Arrastra múltiples imágenes a la vez. El programa buscará el producto en Neon por el nombre de la foto (ignora acentos).")
 
 # Cargar secretos de forma segura desde Streamlit Cloud
 try:
@@ -18,14 +19,31 @@ except KeyError as e:
     st.error(f"❌ Error: Falta configurar la variable {e} en los Secrets de Streamlit.")
     st.stop()
 
+# --- FUNCIÓN PARA ELIMINAR ACENTOS EN PYTHON ---
+def eliminar_acentos(texto):
+    """
+    Transforma caracteres como 'á', 'é', 'í', 'ó', 'ú' en 'a', 'e', 'i', 'o', 'u'.
+    Mantiene la 'ñ' intacta para no romper nombres de productos.
+    """
+    texto_normalizado = unicodedata.normalize('NFD', texto)
+    # Filtramos omitiendo los símbolos de acentuación excepto si es parte de la Ñ
+    resultado = []
+    for c in texto_normalizado:
+        if unicodedata.category(c) != 'Mn':
+            resultado.append(c)
+        elif c == '\u0303' and len(resultado) > 0 and resultado[-1] in ('n', 'N'):
+            # Si el caracter es la virgulilla de la ñ, se la volvemos a emparejar a la n
+            resultado.append(c)
+            
+    texto_limpio = "".join(resultado)
+    return unicodedata.normalize('NFC', texto_limpio)
+
 # --- FUNCIÓN PARA SUBIR A IMGBB ---
 def subir_imagen_a_album(imagen_bytes, nombre_limpio_foto):
     """Sube la imagen en memoria a ImgBB dentro del álbum especificado."""
-    # ✅ URL Oficial de la API corregida para evitar el error de JSON
     url_api = "https://api.imgbb.com/1/upload"  
     
     try:
-        # ✅ Incluye .decode('utf-8') para enviar texto limpio a ImgBB
         imagen_base64 = base64.b64encode(imagen_bytes).decode('utf-8')
         
         datos = {
@@ -46,7 +64,7 @@ def subir_imagen_a_album(imagen_bytes, nombre_limpio_foto):
 
 # --- FUNCIÓN PARA PROCESAR EL LOTE ---
 def procesar_lote_imagenes(archivos_subidos):
-    """Recorre las fotos, busca el producto en Neon y actualiza las URLs."""
+    """Recorre las fotos, busca el producto en Neon ignorando tildes y actualiza las URLs."""
     conn = None
     try:
         conn = psycopg2.connect(url_limpia)
@@ -62,24 +80,34 @@ def procesar_lote_imagenes(archivos_subidos):
         for index, archivo in enumerate(archivos_subidos):
             # 1. Obtener el nombre del archivo sin la extensión (.jpg, .png, etc.)
             nombre_archivo_completo = archivo.name
-            # ✅ Corrección de sintaxis para extraer correctamente el nombre limpio
             nombre_sin_extension = nombre_archivo_completo.rsplit('.', 1)[0].strip()
             
-            # 2. Buscar en Neon si existe un producto con ese nombre exacto (ignorando mayúsculas/minúsculas)
-            query_buscar = "SELECT id_producto, nombre FROM public.productos WHERE LOWER(nombre) = LOWER(%s) LIMIT 1;"
-            cur.execute(query_buscar, (nombre_sin_extension,))
+            # 2. Limpiar acentos del nombre del archivo en Python
+            nombre_archivo_sin_tildes = eliminar_acentos(nombre_sin_extension)
+            
+            # 3. Buscar en Neon ignorando tildes tanto en la base de datos como en el parámetro enviado
+            # Usamos translate en PostgreSQL para convertir á,é,í,ó,ú en letras normales en tiempo de consulta
+            query_buscar = """
+                SELECT id_producto, nombre 
+                FROM public.productos 
+                WHERE LOWER(
+                    TRANSLATE(nombre, 'áéíóúÁÉÍÓÚ', 'aeiouAEIOU')
+                ) = LOWER(%s) 
+                LIMIT 1;
+            """
+            cur.execute(query_buscar, (nombre_archivo_sin_tildes,))
             producto = cur.fetchone()
             
             if producto:
                 id_prod = producto['id_producto']
                 nombre_real_prod = producto['nombre']
                 
-                # 3. Leer los bytes de la foto y subirla a ImgBB
+                # 4. Leer los bytes de la foto y subirla a ImgBB
                 bytes_foto = archivo.read()
                 url_foto = subir_imagen_a_album(bytes_foto, nombre_sin_extension)
                 
                 if url_foto:
-                    # 4. Actualizar el registro en Neon
+                    # 5. Actualizar el registro en Neon
                     query_update = "UPDATE public.productos SET url_imagen = %s WHERE id_producto = %s;"
                     cur.execute(query_update, (url_foto, id_prod))
                     conn.commit()
@@ -90,7 +118,7 @@ def procesar_lote_imagenes(archivos_subidos):
                     st.error(f"❌ **{nombre_archivo_completo}** -> Error al subir la imagen a ImgBB.")
                     errores += 1
             else:
-                st.warning(f"⚠️ **{nombre_archivo_completo}** -> No se encontró ningún producto llamado '{nombre_sin_extension}' en Neon.")
+                st.warning(f"⚠️ **{nombre_archivo_completo}** -> No se encontró ningún producto que coincida con '{nombre_sin_extension}' en Neon.")
                 errores += 1
                 
             # Actualizar la barra de progreso
@@ -109,7 +137,6 @@ def procesar_lote_imagenes(archivos_subidos):
 
 # --- COMPONENTE VISUAL ---
 
-# accept_multiple_files=True permite arrastrar todas tus fotos juntas
 lote_fotos = st.file_uploader(
     "Selecciona o arrastra TODAS las imágenes de tus productos simultáneamente:", 
     type=["jpg", "jpeg", "png", "webp"], 
@@ -123,4 +150,4 @@ if lote_fotos:
         with st.spinner("Procesando lote... Esto puede tomar un momento dependiendo de la cantidad de fotos."):
             procesar_lote_imagenes(lote_fotos)
 else:
-    st.info("💡 Consejo: Asegúrate de que el nombre de tus archivos `.jpg` coincida exactamente con el nombre del producto guardado en Neon.")
+    st.info("💡 Consejo: Asegúrate de que el nombre de tus archivos coincida con el del producto. El sistema ahora ignora automáticamente mayúsculas, minúsculas y tildes.")
