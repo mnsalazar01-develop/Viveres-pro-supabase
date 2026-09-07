@@ -3,13 +3,14 @@ import base64
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# 1. CONFIGURACIÓN DE CREDENCIALES
-IMGBB_API_KEY = "TU_API_KEY_DE_IMGBB_AQUÍ"
-IMGBB_ALBUM_ID = "EL_ID_DE_TU_ALBUM_AQUÍ"
+# Cargar secretos de Neon
+DATABASE_URL = st.secrets["neon"]["DATABASE_URL"]
 
-# Pega aquí tu cadena de conexión (Connection String) de Neon
-DATABASE_URL = "postgresql://usuario:contraseña@tu-cluster.neon.tech/dbname?sslmode=require"
+# Cargar secretos de ImgBB
+IMGBB_API_KEY = st.secrets["imgbb"]["API_KEY"]
+IMGBB_ALBUM_ID = st.secrets["imgbb"]["ALBUM_ID"]
 
+# Ya puedes usar las variables en tus funciones de conexión y subida...
 
 def subir_imagen_a_album(ruta_imagen_local, nombre_producto):
     """Sube la imagen a ImgBB dentro del álbum especificado y devuelve la URL."""
