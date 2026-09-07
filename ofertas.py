@@ -82,12 +82,11 @@ def descargar_maestros_directo_neon_3fn():
         m_bd = ejecutar_consulta_neon("SELECT * FROM public.supermercados;") or []
         s_bd = ejecutar_consulta_neon("SELECT * FROM public.sucursales;") or []
         c_bd = ejecutar_consulta_neon("SELECT id_campana, id_super, nombre_campana, fecha_inicio, fecha_fin FROM public.campanas;") or []
-        catalogo_bd = ejecutar_consulta_neon("SELECT id_catalogo, nombre_catalogo FROM public.catalogo;") or []
-        marcas_bd = ejecutar_consulta_neon("SELECT id_marca, nombre_marca AS factory FROM public.marcas;") or []
+
         categorias_bd = ejecutar_consulta_neon("SELECT id_cat, nombre FROM public.categorias ORDER BY nombre;") or []
         subcategorias_bd = ejecutar_consulta_neon("SELECT id_subcat, nombre, id_cat FROM public.subcategorias ORDER BY nombre;") or []
         
-        return o_bd, p_bd, m_bd, s_bd, c_bd, catalogo_bd, marcas_bd, categorias_bd, subcategorias_bd
+        return o_bd, p_bd, m_bd, s_bd, c_bd, categorias_bd, subcategorias_bd
     except Exception as e:
         st.error(f"❌ Error crítico de sincronización en red 3FN optimizada: {e}")
         st.stop()
