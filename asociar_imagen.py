@@ -6,8 +6,8 @@ from psycopg2.extras import RealDictCursor
 
 # --- CONFIGURACIÓN DE LA INTERFAZ DE STREAMLIT ---
 st.set_page_config(page_title="Asociador Pro", page_icon="📸", layout="centered")
-st.title("📸 Asociador de Imágenes Pro (Neon + ImgBB)")
-st.write("Selecciona un producto de la lista y sube su imagen para asociarla automáticamente.")
+st.title("📸 Administrador de Imágenes de Productos (Neon + ImgBB)")
+st.write("Selecciona un producto y elige el método para asignarle su imagen.")
 
 # Cargar secretos de forma segura desde Streamlit Cloud
 try:
@@ -18,15 +18,14 @@ except KeyError as e:
     st.error(f"❌ Error: Falta configurar la variable {e} en los Secrets de Streamlit.")
     st.stop()
 
-# --- FUNCION PARA TRAER LOS PRODUCTOS AL SELECTBOX ---
-@st.cache_data(ttl=60)  # Guarda la lista en memoria por 1 minuto para que cargue instantáneo
+# --- FUNCIÓN PARA TRAER LOS PRODUCTOS AL SELECTBOX ---
+@st.cache_data(ttl=60)
 def obtener_lista_productos():
     """Conecta a Neon y trae el ID y Nombre de todos los productos para el buscador."""
     conn = None
     try:
         conn = psycopg2.connect(url_limpia)
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # Traemos el ID y Nombre ordenados alfabéticamente
         cur.execute("SELECT id_producto, nombre FROM public.productos WHERE nombre IS NOT NULL ORDER BY nombre ASC;")
         productos = cur.fetchall()
         return productos
@@ -37,12 +36,12 @@ def obtener_lista_productos():
         if conn:
             conn.close()
 
+# --- FUNCIÓN PARA SUBIR A IMGBB ---
 def subir_imagen_a_album(imagen_bytes, nombre_producto):
     """Sube la imagen en memoria a ImgBB dentro del álbum especificado."""
-    url_api = "https://imgbb.com"  # Dirección oficial corregida
+    url_api = "https://imgbb.com"  # URL correcta de la API
     
     try:
-        # Convertir los bytes de la imagen subida a formato Base64 de texto
         imagen_base64 = base64.b64encode(imagen_bytes).decode('utf-8')
         
         datos = {
@@ -56,7 +55,7 @@ def subir_imagen_a_album(imagen_bytes, nombre_producto):
         resultado = respuesta.json()
         
         if resultado.get("status") == 200:
-            return resultado["data"]["url"]  # Devuelve el enlace directo (.jpg / .png)
+            return resultado["data"]["url"]
         else:
             st.error(f"❌ Error ImgBB: {resultado.get('error', {}).get('message')}")
             return None
@@ -64,6 +63,7 @@ def subir_imagen_a_album(imagen_bytes, nombre_producto):
         st.error(f"❌ Error al procesar la subida: {e}")
         return None
 
+# --- FUNCIÓN PARA GUARDAR EN NEON ---
 def guardar_url_en_neon(id_producto, url_publica_imagen):
     """Hace el UPDATE directamente en la fila del producto elegido."""
     conn = None
@@ -88,45 +88,69 @@ def guardar_url_en_neon(id_producto, url_publica_imagen):
         if conn:
             conn.close()
 
-# --- CARGAR CATÁLOGO AL INICIAR ---
+# --- FLUJO PRINCIPAL DEL PROGRAMA ---
 catalogo = obtener_lista_productos()
 
 if not catalogo:
     st.warning("⚠️ No se encontraron productos en la tabla 'productos' o la base de datos está vacía.")
 else:
-    # --- FORMULARIO VISUAL EN LA PANTALLA ---
-
-    # 1. Selectbox Pro: Muestra el nombre, pero guarda internamente todo el objeto
+    # 1. Buscador de productos común para ambas opciones
     producto_seleccionado = st.selectbox(
         "1. Selecciona el Producto:",
         options=catalogo,
         format_func=lambda prod: f"{prod['nombre']} (ID: {prod['id_producto']})"
     )
+    
+    id_prod = producto_seleccionado['id_producto']
+    nombre_prod = producto_seleccionado['nombre']
 
-    # 2. Componente de arrastrar y soltar para la imagen
-    archivo_imagen = st.file_uploader("2. Selecciona o arrastra la imagen del producto", type=["jpg", "jpeg", "png", "webp"])
+    st.write("---")
 
-    # El proceso solo corre cuando el usuario presiona activamente el botón
-    if archivo_imagen is not None:
-        if st.button("🚀 Asociar foto y guardar en Neon"):
-            with st.spinner("Procesando subida y actualizando base de datos..."):
-                
-                # Extraemos las variables del producto seleccionado en el selectbox
-                id_prod = producto_seleccionado['id_producto']
-                nombre_prod = producto_seleccionado['nombre']
-                
-                # Leemos la foto
-                bytes_de_la_foto = archivo_imagen.read()
-                
-                # Paso A: Subir a ImgBB
-                url_foto = subir_imagen_a_album(bytes_de_la_foto, nombre_prod)
-                
-                # Paso B: Si la subida fue exitosa, guardar en Neon
-                if url_foto:
-                    exito = guardar_url_en_neon(id_prod, url_foto)
-                    if exito:
-                        st.success(f"¡Éxito! Imagen asociada a '{nombre_prod}' correctamente. 🎉")
-                        st.info(f"🔗 Enlace guardado: {url_foto}")
+    # 2. Selector de modalidad
+    opcion_metodo = st.radio(
+        "2. Selecciona el método para la imagen:",
+        options=["Subir imagen desde la computadora", "Asociar a imagen existente en el álbum"]
+    )
+
+    st.write("---")
+
+    # === MODALIDAD 1: SUBIR DESDE DISCO ===
+    if opcion_metodo == "Subir imagen desde la computadora":
+        archivo_imagen = st.file_uploader("Selecciona o arrastra la imagen del producto", type=["jpg", "jpeg", "png", "webp"])
+        
+        if archivo_imagen is not None:
+            if st.button("🚀 Subir e Inyectar en Neon"):
+                with st.spinner("Procesando subida a ImgBB y guardando en Neon..."):
+                    bytes_de_la_foto = archivo_imagen.read()
+                    
+                    # Ejecuta la subida a internet primero
+                    url_foto = subir_imagen_a_album(bytes_de_la_foto, nombre_prod)
+                    
+                    # Si funcionó, guarda en la base de datos
+                    if url_foto:
+                        if guardar_url_en_neon(id_prod, url_foto):
+                            st.success(f"¡Éxito! Foto subida y asociada a '{nombre_prod}' correctamente. 🎉")
+                            st.info(f"🔗 Enlace guardado: {url_foto}")
+                            st.balloons()
+        else:
+            st.info("💡 Sube una imagen desde tu PC para habilitar el botón de guardado.")
+
+    # === MODALIDAD 2: ENLACE DEL ÁLBUM ===
+    elif opcion_metodo == "Asociar a imagen existente en el álbum":
+        url_existente = st.text_input("Pega la URL directa de la imagen que ya está en tu álbum:", placeholder="https://ibb.co...")
+        
+        if url_existente:
+            # Vista previa opcional si el usuario pega un enlace directo válido
+            if url_existente.startswith("http"):
+                st.image(url_existente, caption="Vista previa de la imagen detectada", width=200)
+
+            if st.button("🔗 Asociar Enlace Directamente"):
+                with st.spinner("Actualizando registro en Neon..."):
+                    url_limpia_foto = url_existente.strip()
+                    
+                    # Guarda el texto directo en Neon saltándose a ImgBB
+                    if guardar_url_en_neon(id_prod, url_limpia_foto):
+                        st.success(f"¡Asociación exitosa! La URL ya está vinculada a '{nombre_prod}'. 🎉")
                         st.balloons()
-    else:
-        st.info("💡 Por favor, sube una imagen arriba para activar el botón de guardado.")
+        else:
+            st.info("💡 Pega un enlace válido de ImgBB para habilitar el botón de asociación.")
