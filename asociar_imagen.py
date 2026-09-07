@@ -1,3 +1,4 @@
+import streamlit as st  # 👈 ¡ESTA LÍNEA ES LA QUE FALTA!
 import requests
 import base64
 import psycopg2
