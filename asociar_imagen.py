@@ -21,9 +21,11 @@ except KeyError as e:
 # --- FUNCIÓN PARA SUBIR A IMGBB ---
 def subir_imagen_a_album(imagen_bytes, nombre_limpio_foto):
     """Sube la imagen en memoria a ImgBB dentro del álbum especificado."""
-    url_api = "https://imgbb.com"  # URL correcta de la API
+    # ✅ URL Oficial de la API corregida para evitar el error de JSON
+    url_api = "https://api.imgbb.com/1/upload"  
     
     try:
+        # ✅ Incluye .decode('utf-8') para enviar texto limpio a ImgBB
         imagen_base64 = base64.b64encode(imagen_bytes).decode('utf-8')
         
         datos = {
@@ -60,6 +62,7 @@ def procesar_lote_imagenes(archivos_subidos):
         for index, archivo in enumerate(archivos_subidos):
             # 1. Obtener el nombre del archivo sin la extensión (.jpg, .png, etc.)
             nombre_archivo_completo = archivo.name
+            # ✅ Corrección de sintaxis para extraer correctamente el nombre limpio
             nombre_sin_extension = nombre_archivo_completo.rsplit('.', 1)[0].strip()
             
             # 2. Buscar en Neon si existe un producto con ese nombre exacto (ignorando mayúsculas/minúsculas)
@@ -106,7 +109,7 @@ def procesar_lote_imagenes(archivos_subidos):
 
 # --- COMPONENTE VISUAL ---
 
-# accept_multiple_files=True permite arrastrar 10, 20 o 50 fotos a la vez
+# accept_multiple_files=True permite arrastrar todas tus fotos juntas
 lote_fotos = st.file_uploader(
     "Selecciona o arrastra TODAS las imágenes de tus productos simultáneamente:", 
     type=["jpg", "jpeg", "png", "webp"], 
