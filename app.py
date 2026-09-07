@@ -40,12 +40,16 @@ pagina_asociar = st.Page("asociar_imagen.py", title="Asociar Imagen", icon="📤
 pagina_grillap = st.Page("grilla_productos.py", title="Grilla_Productos", icon="📤")
 pagina_carga_masiva = st.Page("carga_masiva_imagen.py", title="Carga Masiva Imagen", icon="📤")
 pagina_datos = st.Page("subir_csv.py", title="Subir Datos", icon="⚙️")
+pagina_maqueta = st.Page("maquetacion.py", title="Maquetacion", icon="⚙️")
+pagina_ofertas = st.Page("ofertas.py", title="Ingresar Ofertas", icon="⚙️")
 # 4. CONSTRUCCIÓN AUTOMÁTICA DEL MOTOR DE NAVEGACIÓN EN LA BARRA LATERAL
 enrutador_global = st.navigation([
     pagina_inicio,
     pagina_asociar,
     pagina_carga_masiva,
     pagina_grillap,
+    pagina_maqueta,
+    pagina_ofertas,
     pagina_datos
     
 ])
