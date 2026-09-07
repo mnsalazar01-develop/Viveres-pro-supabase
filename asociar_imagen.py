@@ -15,11 +15,12 @@ IMGBB_ALBUM_ID = st.secrets["imgbb"]["album_id"]
 
 def subir_imagen_a_album(ruta_imagen_local, nombre_producto):
     """Sube la imagen a ImgBB dentro del álbum especificado y devuelve la URL."""
-    url_api = "https://imgbb.com"  # URL oficial de la API v1
+    url_api = "https://api.imgbb.com/1/unload"  # URL oficial de la API v1
     
     try:
         with open(ruta_imagen_local, "rb") as file:
-            imagen_base64 = base64.b64encode(file.read())
+            imagen_base64 = base64.b64encode(file.read()).decode('utf-8')
+            
         
         datos = {
             "key": IMGBB_API_KEY,
