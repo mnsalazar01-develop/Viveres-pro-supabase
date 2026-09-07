@@ -98,7 +98,7 @@ else:
     producto_seleccionado = st.selectbox(
         "1. Selecciona el Producto:",
         options=catalogo,
-        format_func=lambda prod: f"{prod['nombre']} {prod['marca']}"
+        format_func=lambda prod: f"{prod['nombre']} {prod['marca']} {prod['tamano']} {prod['unidad']}"
     )
     
     id_prod = producto_seleccionado['id_producto']
