@@ -36,12 +36,12 @@ def mostrar_centro_control():
 
 # 3. DECLARACIÓN FORMAL DE INSTANCIAS DE PÁGINAS SATÉLITES EN LA RAÍZ
 pagina_inicio = st.Page(mostrar_centro_control, title="🏭 Centro de Control", icon="🏠", default=True)
-pagina_inventario = st.Page("cargar_inventario.py", title="Cargar Inventario Masivo", icon="📤")
+pagina_asociar = st.Page("asociar_imagen.py", title="Asociar Imagen", icon="📤")
 pagina_datos = st.Page("subir_csv.py", title="Subir Datos", icon="⚙️")
 # 4. CONSTRUCCIÓN AUTOMÁTICA DEL MOTOR DE NAVEGACIÓN EN LA BARRA LATERAL
 enrutador_global = st.navigation([
     pagina_inicio,
-    pagina_inventario, 
+    pagina_asociar, 
     pagina_datos
     
 ])
