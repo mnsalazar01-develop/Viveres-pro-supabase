@@ -5,7 +5,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 # Cargar secretos de Neon
-url = st.secrets["neon"]["DATABASE_URL"]
+url_limpia = st.secrets["neon"]["url"]
 
 # Cargar secretos de ImgBB
 IMGBB_API_KEY = st.secrets["imgbb"]["api_key"]
@@ -53,7 +53,7 @@ def asociar_imagen_a_producto_existente(id_producto, ruta_imagen_local):
     conn = None
     try:
         # Conectarse a tu base de datos Neon
-        conn = psycopg2.connect(DATABASE_URL)
+        conn = psycopg2.connect(url_limpia)
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
         # 1. Verificar si el producto existe y obtener su nombre
