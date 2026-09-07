@@ -41,7 +41,7 @@ pagina_grillap = st.Page("grilla_productos.py", title="Grilla_Productos", icon="
 pagina_carga_masiva = st.Page("carga_masiva_imagen.py", title="Carga Masiva Imagen", icon="📤")
 pagina_cargar_imagen = st.Page("cargar_campanas_imagen.py", title="📋 Cargar Imagen", icon="📋")
 pagina_datos = st.Page("subir_csv.py", title="Subir Datos", icon="⚙️")
-pagina_fusion = st.Page("fusion_maquetador_visual.py", title="Fusion Maquetador Visual", icon="⚙️")
+pagina_oferta_visual = st.Page("fusion_maquetador_visual.py", title="Fusion Maquetador Visual", icon="⚙️")
 pagina_maqueta = st.Page("maquetacion.py", title="Maquetacion", icon="⚙️")
 pagina_ofertas = st.Page("ofertas.py", title="Ingresar Ofertas", icon="⚙️")
 # 4. CONSTRUCCIÓN AUTOMÁTICA DEL MOTOR DE NAVEGACIÓN EN LA BARRA LATERAL
@@ -52,7 +52,7 @@ enrutador_global = st.navigation([
     pagina_grillap,
     pagina_cargar_imagen,
     pagina_maqueta,
-    pagina_fusion,
+    pagina_oferta_visual,
     pagina_ofertas,
     pagina_datos
     
