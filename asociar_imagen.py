@@ -1,26 +1,30 @@
-import streamlit as st  # 👈 ¡ESTA LÍNEA ES LA QUE FALTA!
+import streamlit as st
 import requests
 import base64
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# Cargar secretos de Neon
-url_limpia = st.secrets["neon"]["url"]
+# --- CONFIGURACIÓN DE LA INTERFAZ DE STREAMLIT ---
+st.title("📸 Asociador de Imágenes a Productos (Neon + ImgBB)")
+st.write("Ingresa el ID del producto y sube su imagen para guardarla automáticamente en tu álbum privado y actualizar Neon.")
 
-# Cargar secretos de ImgBB
-IMGBB_API_KEY = st.secrets["imgbb"]["api_key"]
-IMGBB_ALBUM_ID = st.secrets["imgbb"]["album_id"]
+# Cargar secretos de forma segura desde Streamlit Cloud
+try:
+    url_limpia = st.secrets["neon"]["url"]
+    IMGBB_API_KEY = st.secrets["imgbb"]["api_key"]
+    IMGBB_ALBUM_ID = st.secrets["imgbb"]["album_id"]
+except KeyError as e:
+    st.error(f"❌ Error: Falta configurar la variable {e} en los Secrets de Streamlit.")
+    st.stop()
 
-# Ya puedes usar las variables en tus funciones de conexión y subida...
-
-def subir_imagen_a_album(ruta_imagen_local, nombre_producto):
-    """Sube la imagen a ImgBB dentro del álbum especificado y devuelve la URL."""
-    url_api = "https://api.imgbb.com/1/unload"  # URL oficial de la API v1
+def subir_imagen_a_album(imagen_bytes, nombre_producto):
+    """Sube la imagen en memoria a ImgBB dentro del álbum especificado."""
+    # Dirección oficial corregida para la API de ImgBB
+    url_api = "https://imgbb.com"
     
     try:
-        with open(ruta_imagen_local, "rb") as file:
-            imagen_base64 = base64.b64encode(file.read()).decode('utf-8')
-            
+        # Convertir los bytes de la imagen subida a formato Base64 de texto (.decode)
+        imagen_base64 = base64.b64encode(imagen_bytes).decode('utf-8')
         
         datos = {
             "key": IMGBB_API_KEY,
@@ -33,63 +37,57 @@ def subir_imagen_a_album(ruta_imagen_local, nombre_producto):
         resultado = respuesta.json()
         
         if resultado.get("status") == 200:
-            return resultado["data"]["url"]  # Enlace directo (.jpg / .png)
+            return resultado["data"]["url"]  # Devuelve el enlace directo (.jpg / .png)
         else:
-            print(f"❌ Error ImgBB: {resultado.get('error', {}).get('message')}")
+            st.error(f"❌ Error ImgBB: {resultado.get('error', {}).get('message')}")
             return None
-            
-    except FileNotFoundError:
-        print(f"❌ Archivo local no encontrado: {ruta_imagen_local}")
-        return None
     except Exception as e:
-        print(f"❌ Error en la subida: {e}")
+        st.error(f"❌ Error al procesar la subida: {e}")
         return None
 
-
-def asociar_imagen_a_producto_existente(id_producto, ruta_imagen_local):
-    """
-    Busca el producto por ID, sube su foto al álbum privado 
-    y actualiza el campo url_imagen en la base de datos.
-    """
+def asociar_imagen_a_producto_existente(id_producto, imagen_bytes):
+    """Busca el producto en Neon, sube la foto y actualiza la base de datos."""
     conn = None
     try:
-        # Conectarse a tu base de datos Neon
+        # Conectarse a Neon
         conn = psycopg2.connect(url_limpia)
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 1. Verificar si el producto existe y obtener su nombre
+        # 1. Verificar si el producto existe
         cur.execute("SELECT nombre FROM public.productos WHERE id_producto = %s;", (id_producto,))
         producto = cur.fetchone()
         
         if not producto:
-            print(f"❌ El producto con ID {id_producto} no existe en la base de datos.")
+            st.error(f"❌ El producto con ID {id_producto} no existe en la base de datos.")
             return False
         
         nombre_prod = producto['nombre']
-        print(f"📦 Producto encontrado: '{nombre_prod}' (ID: {id_producto})")
+        st.write(f"📦 Producto encontrado: **{nombre_prod}**")
         
-        # 2. Subir la imagen al álbum de ImgBB
-        url_publica_imagen = subir_imagen_a_album(ruta_imagen_local, nombre_prod)
+        # 2. Subir la imagen usando la función de arriba
+        st.write("⏳ Subiendo imagen al álbum privado de ImgBB...")
+        url_publica_imagen = subir_imagen_a_album(imagen_bytes, nombre_prod)
         
         if not url_publica_imagen:
-            print("❌ No se pudo procesar la imagen. Cancelando operación.")
             return False
         
-        # 3. Actualizar la columna 'url_imagen' en la tabla 'productos'
+        # 3. Guardar el link en la tabla de productos de Neon
+        st.write("📤 Guardando enlace en la base de datos...")
         query_update = """
             UPDATE public.productos 
             SET url_imagen = %s 
             WHERE id_producto = %s;
         """
         cur.execute(query_update, (url_publica_imagen, id_producto))
-        conn.commit()  # Guardar cambios permanentemente
+        conn.commit()
         
-        print(f"✅ ¡Éxito! Imagen asociada correctamente.")
-        print(f"🔗 Enlace guardado en la BD: {url_publica_imagen}\n")
+        st.success(f"¡Éxito! Imagen asociada a '{nombre_prod}' correctamente. 🎉")
+        st.info(f"🔗 Enlace guardado: {url_publica_imagen}")
+        st.balloons()
         return True
 
     except Exception as error:
-        print(f"❌ Error de Base de Datos: {error}")
+        st.error(f"❌ Error de Base de Datos: {error}")
         if conn:
             conn.rollback()
         return False
@@ -98,9 +96,22 @@ def asociar_imagen_a_producto_existente(id_producto, ruta_imagen_local):
             cur.close()
             conn.close()
 
-# --- PRUEBA DEL PROGRAMA ---
-# Reemplaza con un ID real de tu tabla y una ruta de foto válida en tu PC
-id_a_procesar = 10123049102  # Ejemplo de ID bigint
-foto_local = "imagenes_productos/leche_entera.jpg"
+# --- FORMULARIO VISUAL EN LA PANTALLA ---
 
-asociar_imagen_a_producto_existente(id_producto=id_a_procesar, ruta_imagen_local=foto_local)
+# 1. Entrada para colocar el ID del producto (convertido a número entero Bigint)
+id_entrada = st.number_input("1. Escribe el ID del Producto:", min_value=1, step=1, format="%d")
+
+# 2. Componente de arrastrar y soltar para la imagen
+archivo_imagen = st.file_uploader("2. Selecciona o arrastra la imagen del producto", type=["jpg", "jpeg", "png", "webp"])
+
+# El proceso solo corre cuando el usuario presiona activamente el botón
+if archivo_imagen is not None:
+    if st.button("🚀 Asociar foto y guardar en Neon"):
+        # Al igual que en el CSV, el spinner previene que la app se cuelgue o se quede en negro
+        with st.spinner("Conectando sistemas y procesando archivo..."):
+            # Leemos los bytes del archivo cargado en memoria de la app
+            bytes_de_la_foto = archivo_imagen.read()
+            # Ejecutamos el flujo completo
+            asociar_imagen_a_producto_existente(id_producto=id_entrada, imagen_bytes=bytes_de_la_foto)
+else:
+    st.info("💡 Por favor, sube una imagen arriba para activar el botón de guardado.")
