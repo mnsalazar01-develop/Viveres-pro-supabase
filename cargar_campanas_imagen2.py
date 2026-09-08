@@ -137,24 +137,26 @@ with col_s5:
         15: {"altura_px": 42, "font_b": "0.52rem", "font_span": "0.48rem", "trim": 8}
     }
     layout_dinamico = config_zoom.get(columnas_elegidas, config_zoom[9])
+    
 # =====================================================================
-# PROGRAMA: registro_ofertas_mosaico_fiel.py | PARTE 3 DE 5 (REESTRUCTURADA)
-# MODULO: CARGA DIRECTA DESDE PIZARRA DE OFERTAS ACTIVAS GLOBAL
+# PROGRAMA: registro_ofertas_mosaico_fiel.py | PARTE 3 DE 5 (FILTRO JERÁRQUICO)
+# MODULO: CARGA DIRECTA Y DESTRUIDOR DE DUPLICADOS DE SKU COMERCIAL
 # =====================================================================
 df_laboratorio_activo = pd.DataFrame()
 
 try:
-    # 1. Leemos directamente la pizarra única global de Neon
+    # 1. Leemos la pizarra única global de Neon
     res_po_actual = ejecutar_consulta_neon("SELECT * FROM public.ofertas_activas;") or []
     if res_po_actual:
         df_laboratorio_activo = pd.DataFrame(res_po_actual)
-        # Normalización estricta de IDs a String limpio conservando espacios significativos
         df_laboratorio_activo["id_producto"] = df_laboratorio_activo["id_producto"].astype(str).str.strip()
+        # Aseguramos que la fecha sea interpretada correctamente para ordenar
+        df_laboratorio_activo["updated_at"] = pd.to_datetime(df_laboratorio_activo["updated_at"])
 except Exception as e:
     st.error(f"❌ Error al conectar con la pizarra de ofertas activas: {e}")
     df_laboratorio_activo = pd.DataFrame()
 
-# Inicialización obligatoria de estadísticas y contenedores persistentes en session_state
+# Inicializaciones de Session State
 if "stat_lider" not in st.session_state: st.session_state.stat_lider = 0
 if "stat_otros" not in st.session_state: st.session_state.stat_otros = 0
 if "stat_total" not in st.session_state: st.session_state.stat_total = 0
@@ -163,29 +165,40 @@ if "formulario_imagenes_dict" not in st.session_state: st.session_state["formula
 lista_items = []
 df_pool_unicos = pd.DataFrame()
 
-# 2. CRUCE RELACIONAL REGLA v15 (ADAPTADA A OFERTAS ACTIVAS)
+# 2. ALGORITMO CRUZADO DE DESDUPLICACIÓN JERÁRQUICA
 if not df_laboratorio_activo.empty and not df_p.empty:
     df_lab = df_laboratorio_activo.copy()
-    df_prod = df_p.copy()
     
+    # Marcamos temporalmente cuáles registros pertenecen al Líder actual para la jerarquía
+    df_lab["es_del_lider"] = df_lab["id_super"].fillna(0).astype(int) == int(id_super_contexto)
+    
+    # ORDENAMIENTO DE PRIORIDAD ESTRATÉGICA:
+    # Primero ponemos los del Líder (True va antes que False si ordenamos descendente)
+    # Si ninguno es del Líder, se ordena por la fecha de actualización más nueva (updated_at)
+    df_lab_ordenado = df_lab.sort_values(
+        by=["id_producto", "es_del_lider", "updated_at"], 
+        ascending=[True, False, False]
+    )
+    
+    # ELIMINACIÓN DE DUPLICADOS: Conserva estrictamente el primer registro de cada producto (Aplica tu regla)
+    df_lab_limpio = df_lab_ordenado.drop_duplicates(subset=["id_producto"], keep="first").copy()
+    
+    # 3. CRUCE CON MAESTRO DE PRODUCTOS
+    df_prod = df_p.copy()
     df_prod["id_producto"] = df_prod["id_producto"].astype(str).str.strip()
     
-    # Combinación directa para heredar las imágenes, marcas y nombres maestros
-    df_lote_express = pd.merge(df_lab, df_prod, on="id_producto", how="inner")
+    df_lote_express = pd.merge(df_lab_limpio, df_prod, on="id_producto", how="inner")
     
     if not df_lote_express.empty:
-        # Sincronizamos el precio de la pizarra global
         df_lote_express["precio_oferta"] = df_lote_express["precio_oferta_proyectado"].astype(float)
+        df_lote_express["es_local"] = df_lote_express["es_del_lider"]
         
-        # Identificamos si el registro pertenece al Súper Objetivo (Líder) o a la competencia
-        df_lote_express["es_local"] = df_lote_express["id_super"].fillna(0).astype(int) == int(id_super_contexto)
-        
-        # Sincronización inmediata de métricas corporativas generales
+        # Sincronización inmediata de métricas basadas en SKUs únicos reales en pantalla
         st.session_state.stat_total = len(df_lote_express)
         st.session_state.stat_lider = int(df_lote_express["es_local"].sum())
         st.session_state.stat_otros = st.session_state.stat_total - st.session_state.stat_lider
         
-        # Ordenamiento jerárquico fiel: Categoría -> Subcategoría -> Nombre Alfabético
+        # Ordenamiento visual alfabético estándar por pasillos
         df_lote_express["id_cat"] = df_lote_express["id_cat"].fillna(0).astype(int)
         df_lote_express["id_subcat"] = df_lote_express["id_subcat"].fillna(0).astype(int)
         df_lote_express["nombre_sort"] = df_lote_express["nombre"].fillna("").astype(str).str.strip().str.lower()
@@ -193,12 +206,13 @@ if not df_laboratorio_activo.empty and not df_p.empty:
         df_pool_unicos = df_lote_express.sort_values(by=["id_cat", "id_subcat", "nombre_sort"], ascending=[True, True, True])
         lista_items = df_pool_unicos.to_dict(orient="records")
 
-# RENDER DE PANEL EJECUTIVO SUPERIOR DE MÉTRICAS GLOBALES
-st.write("### Resumen Ejecutivo de la Pizarra de Activos")
+# RENDER DE PANEL EJECUTIVO SUPERIOR
+st.write("### Resumen Ejecutivo de la Pizarra de Activos (SKUs Únicos)")
 metric_col1, metric_col2, metric_col3 = st.columns(3)
-with metric_col1: st.metric(label="📊 Artículos Súper Objetivo", value=st.session_state.get("stat_lider", 0))
-with metric_col2: st.metric(label="🏪 Monitoreo de Competidores", value=st.session_state.get("stat_otros", 0))
-with metric_col3: st.metric(label="📦 Universo Total en Pizarra", value=st.session_state.get("stat_total", 0))
+with metric_col1: st.metric(label="📊 Productos Propios (Líder)", value=st.session_state.get("stat_lider", 0))
+with metric_col2: st.metric(label="🏪 SKUs Alerta Competencia", value=st.session_state.get("stat_otros", 0))
+with metric_col3: st.metric(label="📦 Total Mosaico Único", value=st.session_state.get("stat_total", 0))
+
 
 # =====================================================================
 # PROGRAMA: registro_ofertas_mosaico_fiel.py | PARTE 4 DE 5
