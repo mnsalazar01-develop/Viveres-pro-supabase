@@ -1,16 +1,9 @@
-
-
-
 import re
 from difflib import SequenceMatcher
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import pandas as pd
 import streamlit as st
-
-# --- CONFIGURACIÓN DE LA INTERFAZ DE STREAMLIT ---
-st.title("🔄 Vinculación Inteligente de Imágenes (Neon)")
-st.write("Este módulo busca coincidencias entre los nombres de tus productos y los enlaces que subiste a ImgBB.")
 
 # Cargar secretos de forma segura desde Streamlit Cloud
 try:
@@ -22,9 +15,14 @@ except KeyError as e:
     st.stop()
 
 
-# Cambiamos el archivo de texto por una caja de entrada en la misma aplicación web
+st.title("🔄 Vinculación Inteligente de Imágenes (Neon)")
+st.write("Copia los códigos de inserción de ImgBB directamente aquí abajo para asociarlos con tu catálogo de Neon.")
+
+# Caja de entrada en la misma aplicación web
 texto_imgbb = st.text_area(
-    "https://ibb.co/SXDmMy8p
+    "Pega aquí tus códigos de inserción de ImgBB (Enlaces Directos):", 
+    height=200, 
+    placeholder="https://ibb.co/SXDmMy8p
 https://ibb.co/VYf40TKP
 https://ibb.co/205CxQMj
 https://ibb.co/HpL5K2Vr
@@ -83,9 +81,7 @@ https://ibb.co/KMpkZkz
 https://ibb.co/G42hBZ8j
 https://ibb.co/27tSZ8zP
 https://ibb.co/v6sqsLpq
-https://ibb.co/JWYpzyMN", 
-    height=200, 
-    placeholder="https://ibb.co\nhttps://ibb.co..."
+https://ibb.co/JWYpzyMN"
 )
 
 # Función para limpiar texto y facilitar la comparación
@@ -142,7 +138,7 @@ if st.button("🔍 Analizar y Buscar Coincidencias"):
                             mejor_url = img["url"]
                             mejor_nombre_img = img["nombre_limpio"]
                             
-                    # Si el parecido es mayor al 60%
+                    # Si el parecido es mayor o igual al 60%
                     if mejor_similitud >= 0.60:
                         actualizaciones.append({
                             "id_producto": prod["id_producto"],
