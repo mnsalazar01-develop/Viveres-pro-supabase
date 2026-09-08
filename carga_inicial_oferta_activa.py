@@ -76,26 +76,32 @@ if st.button("🎬 Inicialización Completa de Catálogo Histórico General", us
             with st.spinner("Ejecutando consolidación atómica en el servidor de Neon..."):
                 # La consulta analiza todo el historial ciegamente, extrae la última oferta
                 # de cada producto en cada súper (posicion = 1) y hace el UPSERT
+                # LÓGICA ATÓMICA DE EXTRACCIÓN HISTÓRICA GENERAL (ENFOQUE DE CONJUNTOS)
                 query_migracion = """
                     INSERT INTO public.ofertas_activas (id_producto, id_super, precio_oferta_proyectado)
                     SELECT 
-                        id_producto::VARCHAR as id_producto, -- Lo convertimos a texto al entrar a la nueva tabla
+                        id_producto_txt, 
                         id_super, 
-                        precio_oferta as precio_oferta_proyectado
+                        precio_oferta
                     FROM (
-                        SELECT id_producto, id_super, precio_oferta, id_oferta,
-                               ROW_NUMBER() OVER (
-                                   PARTITION BY id_producto, id_super 
-                                   ORDER BY id_oferta DESC
-                               ) as posicion
+                        SELECT 
+                            id_producto::text as id_producto_txt, -- Convertimos el bigint a texto
+                            id_super, 
+                            precio_oferta, 
+                            id_oferta,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY id_producto, id_super 
+                                ORDER BY id_oferta DESC
+                            ) as posicion
                         FROM public.ofertas
                     ) subconsulta
                     WHERE subconsulta.posicion = 1
-                    ON CONFLICT (id_producto, id_super) 
+                    ON CONFLICT (TRIM(BOTH FROM id_producto), id_super) 
                     DO UPDATE SET 
                         precio_oferta_proyectado = EXCLUDED.precio_oferta_proyectado,
                         updated_at = CURRENT_TIMESTAMP;
                 """
+
 
                 cur.execute(query_migracion)
                 filas_afectadas = cur.rowcount
