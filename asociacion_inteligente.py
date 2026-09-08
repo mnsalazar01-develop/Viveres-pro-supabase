@@ -21,7 +21,17 @@ st.write("Pega aquí los códigos o enlaces de ImgBB para asociarlos con tu cat�
 texto_imgbb = st.text_area(
     "Pega aquí tus códigos de inserción de ImgBB:", 
     height=250, 
-    placeholder="https://i.ibb.co/jv9wQf2F/carne-molida.jpg"
+    placeholder="https://i.ibb.co/jv9wQf2F/carne-molida.jpg
+https://i.ibb.co/CKRGpQrT/Bistec-de-Res.jpg
+https://i.ibb.co/WNsMZwzc/0021165-jamon-cocido-superior-purolomo-250gr-450.jpg
+https://i.ibb.co/S7DF6xPK/05-2.jpg
+https://i.ibb.co/0Rw0yzTX/0021179-jamon-de-pierna-l-prado-250-gr-450.jpg
+https://i.ibb.co/BXxSYkm/0021946-jamon-de-pierna-charvenca-250-gr-450.jpg
+https://i.ibb.co/ZpgC7FwG/images4.jpg
+https://i.ibb.co/qFR5Chjx/jamon-arichuna-pierna-coc-300g.jpg
+https://i.ibb.co/VWjSMp9K/jamon-lapiroca-pierna.jpg
+https://i.ibb.co/cS7Q4rM4/jamon-cocido-estandar-alibal-250gr-450.jpg
+"
 )
 
 # Función para limpiar texto y facilitar la comparación
