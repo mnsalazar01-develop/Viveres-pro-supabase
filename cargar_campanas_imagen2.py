@@ -226,10 +226,12 @@ def dibujar_rejilla_mosaico_fiel(items_mosaico, _df_lab_activo, layout, _columna
                     fila_reciente = match_pizarra.tail(1)
                     precio_defecto = float(fila_reciente["precio_oferta_proyectado"].values[0])
                     id_activa_real = int(fila_reciente["id_oferta_activa"].values[0])
+                    # APLICACIÓN DE OPCIÓN 2: Lectura tolerante a fallos de inicialización del Scope
+                    id_operador_seguro = st.session_state.get("id_super_operador", 0)
+                    
                     # Si el producto pertenece a la cadena que estamos operando, se asume pre-incluido
-                    if int(fila_reciente["id_super"].values[0]) == int(st.session_state["id_super_operador"]):
-                        check_inicial = True
-                
+                    if int(fila_reciente["id_super"].values[0]) == int(id_operador_seguro):
+                        check_inicial = True               
                 # Ajuste dinámico de texto según slider de densidad
                 limite_caracteres = layout["trim"]
                 nombre_lbl = str(fila_p.get("nombre", "")).strip().upper()[:limite_caracteres]
