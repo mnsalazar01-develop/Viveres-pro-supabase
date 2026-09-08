@@ -40,6 +40,7 @@ pagina_asociar = st.Page("asociar_imagen.py", title="Asociar Imagen", icon="📤
 pagina_grillap = st.Page("grilla_productos.py", title="Grilla_Productos", icon="📤")
 pagina_carga_masiva = st.Page("carga_masiva_imagen.py", title="Carga Masiva Imagen", icon="📤")
 pagina_cargar_imagen = st.Page("cargar_campanas_imagen.py", title="📋 Cargar Imagen", icon="📋")
+pagina_cargar_imagen2 = st.Page("cargar_campanas_imagen.py2", title="📋 Cargar Imagen 2", icon="📋")
 pagina_datos = st.Page("subir_csv.py", title="Subir Datos", icon="⚙️")
 pagina_oferta_visual = st.Page("cargar_oferta_visual.py", title="Cargar Oferta Visual", icon="⚙️")
 pagina_oferta_activa = st.Page("carga_inicial_oferta_activa.py", title="Carga Inicial Ofertas", icon="⚙️")
@@ -52,6 +53,7 @@ enrutador_global = st.navigation([
     pagina_carga_masiva,
     pagina_grillap,
     pagina_cargar_imagen,
+    pagina_cargar_imagen2,
     pagina_maqueta,
     pagina_oferta_activa,
     pagina_oferta_visual,
