@@ -37,7 +37,7 @@ def mostrar_centro_control():
 # 3. DECLARACIÓN FORMAL DE INSTANCIAS DE PÁGINAS SATÉLITES EN LA RAÍZ
 pagina_inicio = st.Page(mostrar_centro_control, title="🏭 Centro de Control", icon="🏠", default=True)
 pagina_asociar = st.Page("asociar_imagen.py", title="Asociar Imagen", icon="📤")
-pagina_inteligente = st.Page("asociacion_inteligente.py", title="Asociar Imagen Plus", icon="📤")
+pagina_intelig = st.Page("asociacion_inteligente.py", title="Asociar Imagen Plus", icon="📤")
 pagina_grillap = st.Page("grilla_productos.py", title="Grilla_Productos", icon="📤")
 pagina_carga_masiva = st.Page("carga_masiva_imagen.py", title="Carga Masiva Imagen", icon="📤")
 pagina_cargar_imagen = st.Page("cargar_campanas_imagen.py", title="📋 Cargar Imagen", icon="📋")
@@ -51,7 +51,7 @@ pagina_ofertas = st.Page("ofertas.py", title="Ingresar Ofertas", icon="⚙️")
 enrutador_global = st.navigation([
     pagina_inicio,
     pagina_asociar,
-    pagina_inteligente,
+    pagina_intelig,
     pagina_carga_masiva,
     pagina_grillap,
     pagina_cargar_imagen,
