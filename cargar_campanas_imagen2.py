@@ -252,15 +252,18 @@ def dibujar_rejilla_mosaico_fiel(items_mosaico, _df_lab_activo, layout, _columna
                 with st.container(border=True):
                     st.image(url_foto_render, use_container_width=True)
                     st.markdown(html_especificacion, unsafe_allow_html=True)
-                    
-                    # Sanitizamos el ID reemplazando espacios por guiones para que el Key de Streamlit sea inmune a fallos
+                    # --- ADAPTACIÓN DE CLAVES ÚNICAS POR COMBINACIÓN DE PRODUCTO + SUPERMERCADO
                     id_sanitizado = id_p_raw.replace(" ", "_")
-                    p_key_string = f"num_pvp_{id_sanitizado}_{_id_campana_destino}"
-                    m_key_string = f"chk_load_{id_sanitizado}_{_id_campana_destino}"
+                    id_super_oferta = int(fila_p.get("id_super", 0)) # Capturamos el súper dueño de esta oferta específica
                     
-                    precio_final_input = st.number_input("PVP ($):", min_value=0.0, value=precio_defecto, step=0.01, format="%.2f", key=p_key_string)
+                    # Inyectamos el id_super_oferta en la cadena para romper cualquier duplicidad de SKUs
+                    p_key_string = f"num_pvp_{id_sanitizado}_{id_super_oferta}_{_id_campana_destino}"
+                    m_key_string = f"chk_load_{id_sanitizado}_{id_super_oferta}_{_id_campana_destino}"
+                    
+                    # Los widgets ahora nacerán con identificadores totalmente aislados en la RAM
+                    st.number_input("PVP ($):", min_value=0.0, value=precio_defecto, step=0.01, format="%.2f", key=p_key_string)
                     st.checkbox("Incluir", value=check_inicial, key=m_key_string)
-                    
+                                     
                     # Conservamos el mapeo en RAM indexado por el ID de texto original
                     st.session_state["formulario_imagenes_dict"][id_p_raw] = {
                         "id_registro": id_activa_real,
