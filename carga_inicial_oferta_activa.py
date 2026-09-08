@@ -79,23 +79,24 @@ if st.button("🎬 Inicialización Completa de Catálogo Histórico General", us
                 query_migracion = """
                     INSERT INTO public.ofertas_activas (id_producto, id_super, precio_oferta_proyectado)
                     SELECT 
-                        TRIM(id_producto) as id_producto, 
+                        id_producto::VARCHAR as id_producto, -- Lo convertimos a texto al entrar a la nueva tabla
                         id_super, 
                         precio_oferta as precio_oferta_proyectado
                     FROM (
                         SELECT id_producto, id_super, precio_oferta, id_oferta,
                                ROW_NUMBER() OVER (
-                                   PARTITION BY TRIM(id_producto), id_super 
+                                   PARTITION BY id_producto, id_super 
                                    ORDER BY id_oferta DESC
                                ) as posicion
                         FROM public.ofertas
                     ) subconsulta
                     WHERE subconsulta.posicion = 1
-                    ON CONFLICT (TRIM(id_producto), id_super) 
+                    ON CONFLICT (id_producto, id_super) 
                     DO UPDATE SET 
                         precio_oferta_proyectado = EXCLUDED.precio_oferta_proyectado,
                         updated_at = CURRENT_TIMESTAMP;
                 """
+
                 cur.execute(query_migracion)
                 filas_afectadas = cur.rowcount
                 conn.commit()
