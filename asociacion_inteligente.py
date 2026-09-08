@@ -1,12 +1,22 @@
-import re
-from difflib import SequenceMatcher
-import pandas as pd
-from supabase import create_client, Client
+import streamlit as st
+import requests
+import base64
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-# 1. Configura tus credenciales de Supabase
-URL_SUPABASE = "TU_URL_DE_SUPABASE"
-KEY_SUPABASE = "TU_API_KEY_DE_SUPABASE"
-supabase: Client = create_client(URL_SUPABASE, KEY_SUPABASE)
+# --- CONFIGURACIÓN DE LA INTERFAZ DE STREAMLIT ---
+st.set_page_config(page_title="Asociador Pro", page_icon="📸", layout="centered")
+st.title("📸 Administrador de Imágenes de Productos (Neon + ImgBB)")
+st.write("Selecciona un producto y elige el método para asignarle su imagen.")
+
+# Cargar secretos de forma segura desde Streamlit Cloud
+try:
+    url_limpia = st.secrets["neon"]["url"]
+    IMGBB_API_KEY = st.secrets["imgbb"]["api_key"]
+    IMGBB_ALBUM_ID = st.secrets["imgbb"]["album_id"]
+except KeyError as e:
+    st.error(f"❌ Error: Falta configurar la variable {e} en los Secrets de Streamlit.")
+    st.stop()
 
 # Función para limpiar texto y facilitar la comparación
 def limpiar_texto(texto):
