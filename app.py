@@ -42,7 +42,7 @@ pagina_carga_masiva = st.Page("carga_masiva_imagen.py", title="Carga Masiva Imag
 pagina_cargar_imagen = st.Page("cargar_campanas_imagen.py", title="📋 Cargar Imagen", icon="📋")
 pagina_datos = st.Page("subir_csv.py", title="Subir Datos", icon="⚙️")
 pagina_oferta_visual = st.Page("cargar_oferta_visual.py", title="Cargar Oferta Visual", icon="⚙️")
-pagina_oferta_activa = st.Page("carga_inicial_oferta_activa.py", title="Cargar Inicial Ofertas", icon="⚙️")
+pagina_oferta_activa = st.Page("carga_inicial_oferta_activa.py", title="Carga Inicial Ofertas", icon="⚙️")
 pagina_maqueta = st.Page("maquetacion.py", title="Maquetacion", icon="⚙️")
 pagina_ofertas = st.Page("ofertas.py", title="Ingresar Ofertas", icon="⚙️")
 # 4. CONSTRUCCIÓN AUTOMÁTICA DEL MOTOR DE NAVEGACIÓN EN LA BARRA LATERAL
