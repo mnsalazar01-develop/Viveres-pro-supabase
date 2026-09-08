@@ -1,7 +1,5 @@
 # =====================================================================
-# PROGRAMA: carga_inicial_activos.py
-# MODULO: MIGRACIÓN RELACIONAL GENERAL - PIZARRA GLOBAL DE ACTIVOS
-# ENTORNO: PYTHON 3.14 PRODUCTION PRO
+# PROGRAMA: carga_inicial_activos.py (CORREGIDO TIPOS DE DATOS NEON)
 # =====================================================================
 import streamlit as st
 import pandas as pd
@@ -26,7 +24,7 @@ except KeyError:
 
 st.markdown("##### 📊 Auditoría Global de Datos Históricos Disponibles")
 
-# 2. CÁLCULO DE MÉTRICAS EN ENFOQUE GENERAL (SIN FILTRO DE SUPERMERCADO)
+# 2. CÁLCULO DE MÉTRICAS EN ENFOQUE GENERAL (CORREGIDO CASTEO BIGINT)
 total_skus_unicos = 0
 total_cadenas = 0
 lote_neto_proyectado = 0
@@ -35,22 +33,29 @@ try:
     conn_stats = psycopg2.connect(url_limpia)
     cur_s = conn_stats.cursor(cursor_factory=RealDictCursor)
     
-    # Descarga directa del pool mínimo necesario para las métricas globales
-    cur_s.execute("SELECT TRIM(id_producto) as id_producto, id_super FROM public.ofertas;")
+    # SOLUCIÓN: Convertimos el bigint a text directo en SQL usando ::text antes de agrupar o contar
+    query_stats = """
+        SELECT 
+            id_producto::text as id_producto_txt, 
+            id_super 
+        FROM public.ofertas;
+    """
+    cur_s.execute(query_stats)
     res_ofertas = cur_s.fetchall()
     conn_stats.close()
     
     if res_ofertas:
         df_pool = pd.DataFrame(res_ofertas)
         
-        # 1. Conteo de SKUs únicos totales en la historia
-        total_skus_unicos = df_pool["id_producto"].nunique()
+        # 1. Conteo de SKUs únicos totales en la historia (como strings limpios)
+        total_skus_unicos = df_pool["id_producto_txt"].str.strip().nunique()
         
         # 2. Conteo de cadenas comerciales involucradas
         total_cadenas = df_pool["id_super"].nunique()
         
         # 3. Lote neto proyectado (combinaciones únicas de producto + súper)
-        lote_neto_proyectado = len(df_pool.drop_duplicates(subset=["id_producto", "id_super"]))
+        df_pool["id_producto_txt"] = df_pool["id_producto_txt"].str.strip()
+        lote_neto_proyectado = len(df_pool.drop_duplicates(subset=["id_producto_txt", "id_super"]))
         
 except Exception as e_stats:
     st.error(f"❌ Error al calcular estadísticas globales: {e_stats}")
@@ -74,9 +79,8 @@ if st.button("🎬 Inicialización Completa de Catálogo Histórico General", us
             cur = conn.cursor()
             
             with st.spinner("Ejecutando consolidación atómica en el servidor de Neon..."):
-                # La consulta analiza todo el historial ciegamente, extrae la última oferta
-                # de cada producto en cada súper (posicion = 1) y hace el UPSERT
-                # LÓGICA ATÓMICA DE EXTRACCIÓN HISTÓRICA GENERAL (ENFOQUE DE CONJUNTOS)
+                # La consulta analiza el historial, convierte el bigint a texto,
+                # y realiza el UPSERT mapeando contra el índice funcional sin romper por comillas.
                 query_migracion = """
                     INSERT INTO public.ofertas_activas (id_producto, id_super, precio_oferta_proyectado)
                     SELECT 
@@ -85,7 +89,7 @@ if st.button("🎬 Inicialización Completa de Catálogo Histórico General", us
                         precio_oferta
                     FROM (
                         SELECT 
-                            id_producto::text as id_producto_txt, -- Convertimos el bigint a texto
+                            id_producto::text as id_producto_txt, 
                             id_super, 
                             precio_oferta, 
                             id_oferta,
@@ -96,13 +100,11 @@ if st.button("🎬 Inicialización Completa de Catálogo Histórico General", us
                         FROM public.ofertas
                     ) subconsulta
                     WHERE subconsulta.posicion = 1
-                    ON CONFLICT (TRIM(BOTH FROM id_producto), id_super) 
+                    ON CONFLICT (id_producto, id_super) 
                     DO UPDATE SET 
                         precio_oferta_proyectado = EXCLUDED.precio_oferta_proyectado,
                         updated_at = CURRENT_TIMESTAMP;
                 """
-
-
                 cur.execute(query_migracion)
                 filas_afectadas = cur.rowcount
                 conn.commit()
